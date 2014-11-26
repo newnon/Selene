@@ -8,6 +8,28 @@
 
 namespace sel {
 namespace detail {
+    
+template<typename T>
+struct is_callable {
+private:
+    typedef char(&yes)[1];
+    typedef char(&no)[2];
+    
+    struct Fallback { void operator()(); };
+    struct Derived : T, Fallback { };
+    
+    template<typename U, U> struct Check;
+    
+    template<typename>
+    static yes test(...);
+    
+    template<typename C>
+    static no test(Check<void (Fallback::*)(), &C::operator()>*);
+    
+public:
+    static const bool value = sizeof(test<Derived>(0)) == sizeof(yes);
+};
+    
 template <typename T>
 struct lambda_traits : public lambda_traits<decltype(&T::operator())> {};
 
@@ -22,9 +44,9 @@ private:
     std::vector<std::unique_ptr<BaseFun>> _funs;
     std::vector<std::unique_ptr<BaseObj>> _objs;
     std::vector<std::unique_ptr<BaseClass>> _classes;
-    lua_State *_state;
+    const std::shared_ptr<lua_State> &_state;
 public:
-    Registry(lua_State *state) : _state(state) {}
+    Registry(const std::shared_ptr<lua_State> &state):_state(state) {}
 
     template <typename L>
     void Register(L lambda) {

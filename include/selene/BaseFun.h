@@ -7,14 +7,14 @@
 namespace sel {
 struct BaseFun {
     virtual ~BaseFun() {}
-    virtual int Apply(lua_State *state) = 0;
+    virtual int Apply() = 0;
 };
 
 namespace detail {
 
 inline int _lua_dispatcher(lua_State *l) {
     BaseFun *fun = (BaseFun *)lua_touserdata(l, lua_upvalueindex(1));
-    return fun->Apply(l);
+    return fun->Apply();
 }
 
 template <typename Ret, typename... Args, std::size_t... N>
@@ -32,12 +32,12 @@ inline Ret _lift(std::function<Ret(Args...)> fun,
 
 
 template <typename... T, std::size_t... N>
-inline std::tuple<T...> _get_args(lua_State *state, _indices<N...>) {
+inline std::tuple<T...> _get_args(const std::shared_ptr<lua_State> &state, _indices<N...>) {
     return std::tuple<T...>{_check_get(_id<T>{}, state, N + 1)...};
 }
 
 template <typename... T>
-inline std::tuple<T...> _get_args(lua_State *state) {
+inline std::tuple<T...> _get_args(const std::shared_ptr<lua_State> &state) {
     constexpr std::size_t num_args = sizeof...(T);
     return _get_args<T...>(state, typename _indices_builder<num_args>::type());
 }

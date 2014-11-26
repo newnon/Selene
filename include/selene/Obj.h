@@ -18,7 +18,7 @@ private:
     std::vector<std::unique_ptr<BaseFun>> _funs;
 
     template <typename M>
-    void _register_member(lua_State *state,
+    void _register_member(const std::shared_ptr<lua_State> &state,
                           T *t,
                           const char *member_name,
                           M T::*member) {
@@ -27,7 +27,7 @@ private:
     }
 
     template <typename M>
-    void _register_member(lua_State *state,
+    void _register_member(const std::shared_ptr<lua_State> &state,
                           T *t,
                           const char *member_name,
                           M T::*member,
@@ -47,7 +47,7 @@ private:
     }
 
     template <typename M>
-    void _register_member(lua_State *state,
+    void _register_member(const std::shared_ptr<lua_State> &state,
                           T *t,
                           const char *member_name,
                           M T::*member,
@@ -60,7 +60,7 @@ private:
     }
 
     template <typename Ret, typename... Args>
-    void _register_member(lua_State *state,
+    void _register_member(const std::shared_ptr<lua_State> &state,
                           T *t,
                           const char *fun_name,
                           Ret(T::*fun)(Args&&...)) {
@@ -74,7 +74,7 @@ private:
     }
 
     template <typename Ret, typename... Args>
-    void _register_member(lua_State *state,
+    void _register_member(const std::shared_ptr<lua_State> &state,
                           T *t,
                           const char *fun_name,
                           Ret(T::*fun)(Args...)) {
@@ -87,10 +87,10 @@ private:
             {state, std::string(fun_name), lambda});
     }
 
-    void _register_members(lua_State *state, T *t) {}
+    void _register_members(const std::shared_ptr<lua_State> &state, T *t) {}
 
     template <typename M, typename... Ms>
-    void _register_members(lua_State *state, T *t,
+    void _register_members(const std::shared_ptr<lua_State> &state, T *t,
                            const char *name,
                            M member,
                            Ms... members) {
@@ -98,8 +98,8 @@ private:
         _register_members(state, t, members...);
     }
 public:
-    Obj(lua_State *state, T *t, Members... members) {
-        lua_createtable(state, 0, sizeof...(Members));
+    Obj(const std::shared_ptr<lua_State> &state, T *t, Members... members) {
+        lua_createtable(state.get(), 0, sizeof...(Members));
         _register_members(state, t, members...);
     }
 };

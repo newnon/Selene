@@ -12,11 +12,11 @@ namespace sel {
 namespace detail {
 class LuaRefDeleter {
 private:
-    lua_State *_state;
+    std::shared_ptr<lua_State> _state;
 public:
-    LuaRefDeleter(lua_State *state) : _state{state} {}
+    LuaRefDeleter(const std::shared_ptr<lua_State> &state) : _state{state} {}
     void operator()(int *ref) const {
-        luaL_unref(_state, LUA_REGISTRYINDEX, *ref);
+        luaL_unref(_state.get(), LUA_REGISTRYINDEX, *ref);
         delete ref;
     }
 };
@@ -24,12 +24,17 @@ public:
 class LuaRef {
 private:
     std::shared_ptr<int> _ref;
+    std::shared_ptr<lua_State> _state;
 public:
-    LuaRef(lua_State *state, int ref)
-        : _ref(new int{ref}, detail::LuaRefDeleter{state}) {}
+    LuaRef(const std::shared_ptr<lua_State> &state, int ref)
+        : _ref(new int{ref}, detail::LuaRefDeleter{state}), _state(state) {}
+    
+    LuaRef(const std::shared_ptr<lua_State> &state, const std::shared_ptr<int> &ref)
+    : _ref(ref), _state(state) {}
 
-    void Push(lua_State *state) {
-        lua_rawgeti(state, LUA_REGISTRYINDEX, *_ref);
+    void Push() const {
+        lua_rawgeti(_state.get(), LUA_REGISTRYINDEX, *_ref);
     }
+    const std::shared_ptr<lua_State>& GetSate() const { return _state;}
 };
 }

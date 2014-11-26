@@ -7,25 +7,25 @@ namespace sel {
 template <typename T, typename... Args>
 class Ctor : public BaseFun {
 private:
-    using _ctor_type = std::function<void(lua_State *, Args...)>;
+    using _ctor_type = std::function<void(const std::shared_ptr<lua_State> &, Args...)>;
     _ctor_type _ctor;
-
+    const std::shared_ptr<lua_State>& _state;
 public:
-    Ctor(lua_State *l,
-         const std::string &metatable_name) {
-        _ctor = [metatable_name](lua_State *state, Args... args) {
-            void *addr = lua_newuserdata(state, sizeof(T));
+    Ctor(const std::shared_ptr<lua_State> &l,
+         const std::string &metatable_name):_state(l) {
+        _ctor = [metatable_name](const std::shared_ptr<lua_State> &state, Args... args) {
+            void *addr = lua_newuserdata(state.get(), sizeof(T));
             new(addr) T(args...);
-            luaL_setmetatable(state, metatable_name.c_str());
+            luaL_setmetatable(state.get(), metatable_name.c_str());
         };
-        lua_pushlightuserdata(l, (void *)static_cast<BaseFun *>(this));
-        lua_pushcclosure(l, &detail::_lua_dispatcher, 1);
-        lua_setfield(l, -2, "new");
+        lua_pushlightuserdata(l.get(), (void *)static_cast<BaseFun *>(this));
+        lua_pushcclosure(l.get(), &detail::_lua_dispatcher, 1);
+        lua_setfield(l.get(), -2, "new");
     }
 
-    int Apply(lua_State *l) {
-        std::tuple<Args...> args = detail::_get_args<Args...>(l);
-        auto pack = std::tuple_cat(std::make_tuple(l), args);
+    int Apply() override {
+        std::tuple<Args...> args = detail::_get_args<Args...>(_state);
+        auto pack = std::tuple_cat(std::make_tuple(std::cref(_state)), args);
         detail::_lift(_ctor, pack);
         // The constructor will leave a single userdata entry on the stack
         return 1;

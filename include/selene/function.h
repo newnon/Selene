@@ -17,24 +17,24 @@ template <typename R, typename... Args>
 class function<R(Args...)> {
 private:
     LuaRef _ref;
-    lua_State *_state;
 public:
-    function(int ref, lua_State *state) : _ref(state, ref), _state(state) {}
+    function(int ref, const std::shared_ptr<lua_State> &state) : _ref(state, ref) {}
+    function(const LuaRef &ref) : _ref(ref) {}
 
     R operator()(Args... args) {
-        int handler_index = SetErrorHandler(_state);
-        _ref.Push(_state);
-        detail::_push_n(_state, args...);
+        int handler_index = SetErrorHandler(_ref.GetSate());
+        _ref.Push();
+        detail::_push_n(_ref.GetSate(), args...);
         constexpr int num_args = sizeof...(Args);
-        lua_pcall(_state, num_args, 1, handler_index);
-        lua_remove(_state, handler_index);
-        R ret = detail::_pop(detail::_id<R>{}, _state);
-        lua_settop(_state, 0);
+        lua_pcall(_ref.GetSate(), num_args, 1, handler_index);
+        lua_remove(_ref.GetSate(), handler_index);
+        R ret = detail::_pop(detail::_id<R>{}, _ref.GetSate());
+        lua_settop(_ref.GetSate(), 0);
         return ret;
     }
 
-    void Push(lua_State *state) {
-        _ref.Push(state);
+    void Push() {
+        _ref.Push();
     }
 };
 
@@ -42,22 +42,22 @@ template <typename... Args>
 class function<void(Args...)> {
 private:
     LuaRef _ref;
-    lua_State *_state;
 public:
-    function(int ref, lua_State *state) : _ref(state, ref), _state(state) {}
+    function(int ref, const std::shared_ptr<lua_State> &state) : _ref(state, ref) {}
+    function(const LuaRef &ref) : _ref(ref) {}
 
     void operator()(Args... args) {
-        int handler_index = SetErrorHandler(_state);
-        _ref.Push(_state);
-        detail::_push_n(_state, args...);
+        int handler_index = SetErrorHandler(_ref.GetSate());
+        _ref.Push();
+        detail::_push_n(_ref.GetSate(), args...);
         constexpr int num_args = sizeof...(Args);
-        lua_pcall(_state, num_args, 1, handler_index);
-        lua_remove(_state, handler_index);
-        lua_settop(_state, 0);
+        lua_pcall(_ref.GetSate(), num_args, 1, handler_index);
+        lua_remove(_ref.GetSate(), handler_index);
+        lua_settop(_ref.GetSate(), 0);
     }
 
-    void Push(lua_State *state) {
-        _ref.Push(state);
+    void Push() {
+        _ref.Push();
     }
 };
 
@@ -66,23 +66,23 @@ template <typename... R, typename... Args>
 class function<std::tuple<R...>(Args...)> {
 private:
     LuaRef _ref;
-    lua_State *_state;
 public:
-    function(int ref, lua_State *state) : _ref(state, ref), _state(state) {}
+    function(int ref, const std::shared_ptr<lua_State> &state) : _ref(state, ref) {}
+    function(const LuaRef &ref) : _ref(ref) {}
 
     std::tuple<R...> operator()(Args... args) {
-        int handler_index = SetErrorHandler(_state);
-        _ref.Push(_state);
-        detail::_push_n(_state, args...);
+        int handler_index = SetErrorHandler(_ref.GetSate());
+        _ref.Push();
+        detail::_push_n(_ref.GetSate(), args...);
         constexpr int num_args = sizeof...(Args);
         constexpr int num_ret = sizeof...(R);
-        lua_pcall(_state, num_args, num_ret, handler_index);
-        lua_remove(_state, handler_index);
-        return detail::_pop_n_reset<R...>(_state);
+        lua_pcall(_ref.GetSate(), num_args, num_ret, handler_index);
+        lua_remove(_ref.GetSate(), handler_index);
+        return detail::_pop_n_reset<R...>(_ref.GetSate());
     }
 
-    void Push(lua_State *state) {
-        _ref.Push(state);
+    void Push() {
+        _ref.Push();
     }
 };
 }

@@ -9,6 +9,30 @@ extern "C" {
 }
 
 namespace sel {
+class Registry;
+    
+class LuaStateOwnerDeleter {
+public:
+    LuaStateOwnerDeleter(Registry *registry):_registry(registry){}
+    void operator()(lua_State *state) const {
+        lua_gc(state, LUA_GCCOLLECT, 0);
+        lua_close(state);
+        delete _registry;
+    }
+private:
+    Registry *_registry;
+};
+    
+class LuaStateDeleter {
+public:
+    LuaStateDeleter(Registry *registry):_registry(registry){}
+    void operator()(lua_State *state) const {
+        delete _registry;
+    }
+private:
+    Registry *_registry;
+};
+
 inline std::ostream &operator<<(std::ostream &os, lua_State *l) {
     int top = lua_gettop(l);
     for (int i = 1; i <= top; ++i) {
