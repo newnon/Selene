@@ -8,72 +8,6 @@
 #include "primitives.h"
 
 namespace sel {
-
-class LuaValue;
-    
-enum class LuaType
-{
-    None = LUA_TNONE,
-    Nil = LUA_TNIL,
-    Boolean = LUA_TBOOLEAN,
-    LightUserData = LUA_TLIGHTUSERDATA,
-    Number = LUA_TNUMBER,
-    String = LUA_TSTRING,
-    Table = LUA_TTABLE,
-    Function = LUA_TFUNCTION,
-    UserData = LUA_TUSERDATA,
-    Thread = LUA_TTHREAD,
-};
-
-class Value {
-public:
-    
-    typedef LuaType Type;
-    
-    Value();
-    Value(bool value);
-    Value(void* value);
-    Value(int value);
-    Value(long value);
-    Value(long long value);
-    Value(double value);
-    Value(float value);
-    Value(const char* value);
-    Value(const std::string &value);
-    Value(const std::map<Value, Value> &value);
-    Value(const LuaRef& ref);
-    Value(const Value& v);
-    Value(const std::vector<unsigned char> &value);
-    
-    inline bool Is(Type type) const { return this->type() == type; }
-    
-    inline Type type() const;
-    inline bool bool_value() const;
-    inline int int_value() const;
-    inline long long_value() const;
-    inline float float_value() const;
-    inline double double_value() const;
-    inline const void* userdata_value() const;
-    inline const std::string& string_value() const;
-    inline const std::map<Value, Value>& table_value() const;
-    
-    const Value& operator[] (const Value &value) const;
-    Value& operator[] (const Value &value);
-    
-    operator bool() const;
-    operator char() const;
-    operator int() const;
-    operator long() const;
-    operator double() const;
-    operator std::string() const;
-    operator std::map<Value, Value>() const;
-    template <typename... Args>
-    Value operator()(Args... args) const;
-    bool operator <(const Value &other) const;
-    void push(const std::shared_ptr<lua_State> &l) const;
-private:
-    std::shared_ptr<LuaValue> _value;
-};
    
 namespace detail {
     
@@ -122,12 +56,12 @@ inline Value _check_get(_id<Value>, const std::shared_ptr<lua_State> &l, const i
     return _get(_id<Value>{}, l, index);
 }
     
-inline void _push(const std::shared_ptr<lua_State> &l, Value value) {
+inline void _push(const std::shared_ptr<lua_State> &l, const Value &value) {
     value.push(l);
 }
 
-inline void push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, Value&& value) {
-    _push(l, std::forward<Value>(value));
+inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, const Value& value) {
+    _push(l, value);
 }
     
 }
@@ -276,6 +210,22 @@ public:
     }
 };
 
+template <typename... Args>
+class CFunctionValue : public BaseValue<Value::Type::Function, std::function<Value(Args...)>> {
+public:
+    explicit CFunctionValue(const std::function<Value(Args...)> &value) : BaseValue<Value::Type::Function, std::function<Value(Args...)>>(value) {}
+    template <typename Ret>
+    explicit CFunctionValue(Ret (*value)(Args...)) : BaseValue<Value::Type::Function, std::function<Value(Args...)>>(value) {}
+    const Value operator()(Args... args) const{
+        return this->_value(args...);
+    }
+    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
+        Registry *registry = detail::get_registry(l.get());
+        if(registry)
+            registry->Register(this->_value);
+    }
+};
+
 class UserDataValue : public BaseValue<Value::Type::UserData, std::vector<unsigned char>> {
 public:
     explicit UserDataValue(const std::vector<unsigned char> &value) : BaseValue(value) {}
@@ -307,6 +257,10 @@ inline Value::Value(const char* value) : _value(std::make_shared<StringValue>(st
 inline Value::Value(const std::string &value) : _value(std::make_shared<StringValue>(value)) {}
 inline Value::Value(const std::map<Value, Value> &value) : _value(std::make_shared<TableValue>(value)) {}
 inline Value::Value(const LuaRef& ref) : _value(std::make_shared<FunctionValue>(ref)) {}
+template <typename Ret, typename... Args>
+inline Value::Value(const std::function<Ret(Args...)> &value) : _value(std::make_shared<CFunctionValue>(value)) {}
+template <typename Ret, typename... Args>
+inline Value::Value(Ret (*value)(Args...)) : _value(std::make_shared<CFunctionValue<Args...>>(value)) {}
 inline Value::Value(const std::vector<unsigned char> &value) : _value(std::make_shared<UserDataValue>(value)) {}
 inline Value::Value(const Value &value) : _value(value._value) {}
 
@@ -335,7 +289,11 @@ inline Value Value::operator()(Args... args) const {
         return (*functionValue)(args...);
     }
     else{
-        return Value();
+        CFunctionValue<Args...> *cfunctionValue = dynamic_cast<CFunctionValue<Args...>*>(_value.get());
+        if(cfunctionValue)
+            return (*cfunctionValue)(args...);
+        else
+            return Value();
     }
 }
 

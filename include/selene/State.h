@@ -21,17 +21,48 @@ class State {
 private:
     std::shared_ptr<lua_State> _l;
     Registry *_registry;
+    
+    struct LuaStateOwnerDeleter {
+        void operator()(lua_State *state) const {
+            lua_gc(state, LUA_GCCOLLECT, 0);
+            lua_close(state);
+            void *data = nullptr;
+            lua_getallocf(state, &data);
+            detail::RegistryStorage* storage = reinterpret_cast<detail::RegistryStorage*>(data);
+            if(storage)
+            {
+                if(storage->registry)
+                    delete storage->registry;
+                delete storage;
+            }
+        }
+    };
+    
+    struct LuaStateDeleter {
+        void operator()(lua_State *state) const {
+            void *data = nullptr;
+            lua_getallocf(state, &data);
+            detail::RegistryStorage* storage = reinterpret_cast<detail::RegistryStorage*>(data);
+            if(storage)
+            {
+                lua_setallocf(state, storage->function, storage->data);
+                if(storage->registry)
+                    delete storage->registry;
+                delete storage;
+            }
+        }
+    };
 
 public:
     State() : State(false) {}
-    State(bool should_open_libs):_registry(new Registry(_l)) {
-        _l = std::shared_ptr<lua_State>(luaL_newstate(), LuaStateOwnerDeleter(_registry));
+    State(bool should_open_libs):_l(std::shared_ptr<lua_State>(luaL_newstate(), LuaStateOwnerDeleter())), _registry(new Registry(_l)) {
         if (_l == nullptr) throw 0;
+        detail::store_registry(_l.get(), _registry);
         if (should_open_libs) luaL_openlibs(_l.get());
         lua_atpanic(_l.get(), atpanic);
     }
-    State(lua_State *l): _registry(new Registry(_l)) {
-        _l = std::shared_ptr<lua_State>(l, LuaStateDeleter(_registry));
+    State(lua_State *l): _l(std::shared_ptr<lua_State>(l, LuaStateDeleter())), _registry(new Registry(_l)) {
+        detail::store_registry(_l.get(), _registry);
         lua_atpanic(_l.get(), atpanic);
     }
     State(const State &other) = delete;

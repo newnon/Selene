@@ -1,6 +1,8 @@
 #pragma once
 
 #include <string>
+#include <map>
+#include <vector>
 #include "traits.h"
 #include "MetatableRegistry.h"
 
@@ -15,7 +17,108 @@ extern "C" {
  */
 
 namespace sel {
+    
+class LuaValue;
+
+enum class LuaType
+{
+    None = LUA_TNONE,
+    Nil = LUA_TNIL,
+    Boolean = LUA_TBOOLEAN,
+    LightUserData = LUA_TLIGHTUSERDATA,
+    Number = LUA_TNUMBER,
+    String = LUA_TSTRING,
+    Table = LUA_TTABLE,
+    Function = LUA_TFUNCTION,
+    UserData = LUA_TUSERDATA,
+    Thread = LUA_TTHREAD,
+};
+
+class Value {
+public:
+    
+    typedef LuaType Type;
+    
+    Value();
+    Value(bool value);
+    Value(void* value);
+    Value(int value);
+    Value(long value);
+    Value(long long value);
+    Value(double value);
+    Value(float value);
+    Value(const char* value);
+    Value(const std::string &value);
+    Value(const std::map<Value, Value> &value);
+    template <typename Ret, typename... Args>
+    Value(const std::function<Ret(Args...)> &fun);
+    template <typename Ret, typename... Args>
+    Value(Ret (*value)(Args...));
+    Value(const LuaRef& ref);
+    Value(const Value& v);
+    Value(const std::vector<unsigned char> &value);
+    
+    inline bool Is(Type type) const { return this->type() == type; }
+    
+    inline Type type() const;
+    inline bool bool_value() const;
+    inline int int_value() const;
+    inline long long_value() const;
+    inline float float_value() const;
+    inline double double_value() const;
+    inline const void* userdata_value() const;
+    inline const std::string& string_value() const;
+    inline const std::map<Value, Value>& table_value() const;
+    
+    const Value& operator[] (const Value &value) const;
+    Value& operator[] (const Value &value);
+    
+    operator bool() const;
+    operator char() const;
+    operator int() const;
+    operator long() const;
+    operator double() const;
+    operator std::string() const;
+    operator std::map<Value, Value>() const;
+    template <typename... Args>
+    Value operator()(Args... args) const;
+    bool operator <(const Value &other) const;
+    void push(const std::shared_ptr<lua_State> &l) const;
+private:
+    std::shared_ptr<LuaValue> _value;
+};
+
+class Registry;
+    
 namespace detail {
+    
+struct RegistryStorage
+{
+    Registry *registry;
+    void *data;
+    lua_Alloc function;
+};
+    
+void *lua_allocator(void *ud, void *ptr, size_t osize, size_t nsize)
+{
+    RegistryStorage *storage = reinterpret_cast<RegistryStorage*>(ud);
+    return storage->function(storage->data, ptr, osize, nsize);
+}
+    
+void store_registry(lua_State *l, Registry *r)
+{
+    void *data = nullptr;
+    lua_Alloc func = lua_getallocf(l, &data);
+    RegistryStorage *storage = new RegistryStorage{r, data, func};
+    lua_setallocf(l, &lua_allocator, storage);
+}
+    
+Registry * get_registry(lua_State *l)
+{
+    void *data = nullptr;
+    lua_getallocf(l, &data);
+    return reinterpret_cast<RegistryStorage*>(data)->registry;
+}
 
 template <typename T>
 struct is_primitive {
@@ -118,6 +221,8 @@ inline std::string _get(_id<std::string>, const std::shared_ptr<lua_State> &l, c
     const char *buff = lua_tolstring(l.get(), index, &size);
     return std::string{buff, size};
 }
+    
+inline Value _get(_id<Value>, const std::shared_ptr<lua_State> &l, const int index);
 
 template <typename T>
 inline T* _check_get(_id<T*>, const std::shared_ptr<lua_State> &l, const int index) {
@@ -181,6 +286,8 @@ inline std::string _check_get(_id<std::string>, const std::shared_ptr<lua_State>
     const char *buff = luaL_checklstring(l.get(), index, &size);
     return std::string{buff, size};
 }
+    
+inline Value _check_get(_id<Value>, const std::shared_ptr<lua_State> &l, const int index);
 
 // Worker type-trait struct to _pop_n
 // Popping multiple elements returns a tuple
@@ -347,6 +454,8 @@ inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, cons
 inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, const char *s) {
     lua_pushstring(l.get(), s);
 }
+    
+inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, const Value& value);
 
 template <typename T>
 inline void _push(const std::shared_ptr<lua_State> &l, T* t) {
@@ -418,6 +527,8 @@ inline void _push(const std::shared_ptr<lua_State> &l, const std::string &s) {
 inline void _push(const std::shared_ptr<lua_State> &l, const char *s) {
     lua_pushstring(l.get(), s);
 }
+    
+inline void _push(const std::shared_ptr<lua_State> &l, const Value& value);
 
 template <typename T>
 inline void _set(const std::shared_ptr<lua_State> &l, T &&value, const int index) {
