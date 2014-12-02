@@ -35,6 +35,6 @@ public:
     void Push() const {
         lua_rawgeti(_state.get(), LUA_REGISTRYINDEX, *_ref);
     }
-    const std::shared_ptr<lua_State>& GetSate() const { return _state;}
+    const std::shared_ptr<lua_State>& GetState() const { return _state;}
 };
 }

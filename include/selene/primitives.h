@@ -40,46 +40,84 @@ public:
     typedef LuaType Type;
     
     Value();
-    Value(bool value);
-    Value(void* value);
-    Value(int value);
-    Value(long value);
-    Value(long long value);
-    Value(double value);
-    Value(float value);
-    Value(const char* value);
-    Value(const std::string &value);
-    Value(const std::map<Value, Value> &value);
-    template <typename Ret, typename... Args>
-    Value(const std::function<Ret(Args...)> &fun);
-    template <typename Ret, typename... Args>
-    Value(Ret (*value)(Args...));
-    Value(const LuaRef& ref);
     Value(const Value& v);
-    Value(const std::vector<unsigned char> &value);
+    
+    explicit Value(bool value);
+    explicit Value(void* value);
+    explicit Value(short value);
+    explicit Value(unsigned short value);
+    explicit Value(int value);
+    explicit Value(unsigned int value);
+    explicit Value(long value);
+    explicit Value(unsigned long value);
+    explicit Value(long long value);
+    explicit Value(unsigned long long value);
+    explicit Value(float value);
+    explicit Value(double value);
+    explicit Value(long double value);
+    explicit Value(const char* value);
+    explicit Value(const std::string &value);
+    explicit Value(const std::map<Value, Value> &value);
+    template <typename Ret, typename... Args>
+    explicit Value(const std::function<Ret(Args...)> &fun);
+    template <typename Ret, typename... Args>
+    explicit Value(Ret (*value)(Args...));
+    explicit Value(const LuaRef& ref);
+    explicit Value(const std::vector<unsigned char> &value);
     
     inline bool Is(Type type) const { return this->type() == type; }
-    
     inline Type type() const;
-    inline bool bool_value() const;
-    inline int int_value() const;
-    inline long long_value() const;
-    inline float float_value() const;
-    inline double double_value() const;
-    inline const void* userdata_value() const;
-    inline const std::string& string_value() const;
-    inline const std::map<Value, Value>& table_value() const;
+    template <typename T>
+    const T& cast() const;
     
-    const Value& operator[] (const Value &value) const;
-    Value& operator[] (const Value &value);
+    Value& operator=(bool value);
+    Value& operator=(void* value);
+    Value& operator=(short value);
+    Value& operator=(unsigned short value);
+    Value& operator=(int value);
+    Value& operator=(unsigned int value);
+    Value& operator=(long value);
+    Value& operator=(unsigned long value);
+    Value& operator=(long long value);
+    Value& operator=(unsigned long long value);
+    Value& operator=(float value);
+    Value& operator=(double value);
+    Value& operator=(long double value);
+    Value& operator=(const char* value);
+    Value& operator=(const std::string &value);
+    Value& operator=(const std::map<Value, Value> &value);
+    template <typename Ret, typename... Args>
+    Value& operator=(const std::function<Ret(Args...)> &fun);
+    template <typename Ret, typename... Args>
+    Value& operator=(Ret (*value)(Args...));
+    Value& operator=(const LuaRef& ref);
+    Value& operator=(const std::vector<unsigned char> &value);
+
     
-    operator bool() const;
-    operator char() const;
-    operator int() const;
-    operator long() const;
-    operator double() const;
-    operator std::string() const;
-    operator std::map<Value, Value>() const;
+    template <typename T>
+    const Value& operator[] (const T &value) const;
+    
+    bool bool_value() const;
+    double number_value() const;
+    const std::string& string_value() const;
+    const std::map<Value, Value>& table_value() const;
+    template <typename Ret, typename... Args>
+    const std::function<Ret(Args...)> function_value() const;
+    
+    explicit operator bool() const;
+    explicit operator short() const;
+    explicit operator unsigned short() const;
+    explicit operator int() const;
+    explicit operator unsigned int() const;
+    explicit operator long() const;
+    explicit operator unsigned long() const;
+    explicit operator long long() const;
+    explicit operator unsigned long long() const;
+    explicit operator float() const;
+    explicit operator double() const;
+    explicit operator long double() const;
+    explicit operator const std::string&() const;
+    explicit operator const std::map<Value, Value>&() const;
     template <typename... Args>
     Value operator()(Args... args) const;
     bool operator <(const Value &other) const;

@@ -82,10 +82,7 @@ public:
     virtual ~LuaValue() {}
     virtual Value::Type type() const = 0;
     virtual bool bool_value() const { return '\0'; }
-    virtual int int_value() const { return 0; }
-    virtual long long_value() const { return 0; }
-    virtual double double_value() const { return 0; }
-    virtual float float_value() const { return 0; }
+    virtual double number_value() const { return 0; }
     virtual const void* userdata_value() const { return nullptr; }
     virtual const std::string& string_value() const { return statics().empty_string; }
     virtual const std::map<Value, Value>& table_value() const { return statics().empty_table; }
@@ -137,15 +134,8 @@ public:
 
 class NumberValue : public BaseValue<Value::Type::Number, double> {
 public:
-    explicit NumberValue(float value) : BaseValue(value) {}
     explicit NumberValue(double value) : BaseValue(value) {}
-    explicit NumberValue(int value) : BaseValue(value) {}
-    explicit NumberValue(long value) : BaseValue(value) {}
-    explicit NumberValue(long long value) : BaseValue(value) {}
-    virtual inline int int_value() const override { return static_cast<int>(_value); }
-    virtual inline long long_value() const override { return static_cast<long>(_value); }
-    virtual inline float float_value() const override { return static_cast<float>(_value); }
-    virtual inline double double_value() const override { return static_cast<double>(_value); }
+    virtual inline double number_value() const override { return static_cast<double>(_value); }
     virtual inline const std::string& string_value() const override { return _temp = std::to_string(_value); }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
         detail::_push(l, _value);
@@ -159,10 +149,7 @@ class StringValue : public BaseValue<Value::Type::String, std::string> {
 public:
     explicit StringValue(const std::string &value) : BaseValue(value) {}
     explicit StringValue(std::string &&value) : BaseValue(std::move(value)) {}
-    virtual inline int int_value() const override { return static_cast<int>(std::stod(_value)); }
-    virtual inline long long_value() const override { return static_cast<long>(std::stod(_value)); }
-    virtual inline double double_value() const override { return static_cast<double>(std::stod(_value)); }
-    virtual inline float float_value() const override { return static_cast<float>(std::stod(_value)); }
+    virtual inline double number_value() const override { return static_cast<double>(std::stod(_value)); }
     virtual inline const std::string& string_value() const override { return _value; }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
         detail::_push(l, _value);
@@ -193,7 +180,7 @@ public:
     explicit FunctionValue(const LuaRef &value) : BaseValue(value) {}
     template <typename... Args>
     const Value operator()(Args... args) const{
-        const std::shared_ptr<lua_State> &state = _value.GetSate();
+        const std::shared_ptr<lua_State> &state = _value.GetState();
         _value.Push();
         detail::_push_n(state, args...);
         constexpr int num_args = sizeof...(Args);
@@ -203,10 +190,40 @@ public:
         return ret;
     }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
-        if(_value.GetSate() == l)
+        if(_value.GetState() == l)
             _value.Push();
         else
             detail::_push(l, nullptr);
+    }
+template <typename Ret, typename... Args, class = typename std::enable_if<!std::is_void<Ret>::value>::type >
+    inline const std::function<Ret(Args...)> function_value() const
+    {
+        LuaRef ref = _value;
+        return [ref] (Args... args)
+        {
+            const std::shared_ptr<lua_State> &state = ref.GetState();
+            ref.Push();
+            detail::_push_n(state, args...);
+            constexpr int num_args = sizeof...(Args);
+            lua_call(state.get(), num_args, 1);
+            Ret ret = detail::_pop(detail::_id<Ret>{}, state);
+            lua_settop(state.get(), 0);
+            return ret;
+        };
+    }
+    template <typename Ret, typename... Args, class = typename std::enable_if<std::is_void<Ret>::value>::type>
+    inline const std::function<void(Args...)> function_value() const
+    {
+        LuaRef ref = _value;
+        return [ref] (Args... args)
+        {
+            const std::shared_ptr<lua_State> &state = ref.GetState();
+            ref.Push();
+            detail::_push_n(state, args...);
+            constexpr int num_args = sizeof...(Args);
+            lua_call(state.get(), num_args, 1);
+            lua_settop(state.get(), 0);
+        };
     }
 };
 
@@ -223,6 +240,15 @@ public:
         Registry *registry = detail::get_registry(l.get());
         if(registry)
             registry->Register(this->_value);
+    }
+    template <typename Ret>
+    inline const std::function<Ret(Args...)> function_value() const
+    {
+        auto ref = this->_value;
+        return [ref] (Args... args)
+        {
+            return static_cast<Ret>(ref(args...));
+        };
     }
 };
 
@@ -249,10 +275,17 @@ public:
 inline Value::Value() : _value(std::make_shared<NilValue>()) {}
 inline Value::Value(bool value) : _value(std::make_shared<BoolValue>(value)) {}
 inline Value::Value(void *value) : _value(std::make_shared<LightUserDataValue>(value)) {}
+inline Value::Value(short value) : _value(std::make_shared<NumberValue>(value)) {}
+inline Value::Value(unsigned short value) : _value(std::make_shared<NumberValue>(value)) {}
 inline Value::Value(int value) : _value(std::make_shared<NumberValue>(value)) {}
+inline Value::Value(unsigned int value) : _value(std::make_shared<NumberValue>(value)) {}
 inline Value::Value(long value) : _value(std::make_shared<NumberValue>(value)) {}
+inline Value::Value(unsigned long value) : _value(std::make_shared<NumberValue>(value)) {}
 inline Value::Value(long long value) : _value(std::make_shared<NumberValue>(value)) {}
+inline Value::Value(unsigned long long value) : _value(std::make_shared<NumberValue>(value)) {}
+inline Value::Value(float value) : _value(std::make_shared<NumberValue>(value)) {}
 inline Value::Value(double value) : _value(std::make_shared<NumberValue>(value)) {}
+inline Value::Value(long double value) : _value(std::make_shared<NumberValue>(value)) {}
 inline Value::Value(const char* value) : _value(std::make_shared<StringValue>(std::string(value))) {}
 inline Value::Value(const std::string &value) : _value(std::make_shared<StringValue>(value)) {}
 inline Value::Value(const std::map<Value, Value> &value) : _value(std::make_shared<TableValue>(value)) {}
@@ -264,23 +297,81 @@ inline Value::Value(Ret (*value)(Args...)) : _value(std::make_shared<CFunctionVa
 inline Value::Value(const std::vector<unsigned char> &value) : _value(std::make_shared<UserDataValue>(value)) {}
 inline Value::Value(const Value &value) : _value(value._value) {}
 
-inline Value::Type Value::type() const { return _value->type(); }
-inline bool Value::bool_value() const { return _value->bool_value(); }
-inline int Value::int_value() const { return _value->int_value(); }
-inline long Value::long_value() const { return _value->long_value(); }
-inline float Value::float_value() const { return _value->float_value(); }
-inline double Value::double_value() const { return _value->double_value(); }
-inline const std::string& Value::string_value() const { return _value->string_value(); }
-inline const void* Value::userdata_value() const { return _value->userdata_value(); }
-inline const std::map<Value, Value>& Value::table_value() const { return _value->table_value(); }
-inline const Value& Value::operator[](const Value &value) const { return (*_value)[value]; }
+inline Value& Value::operator=(bool value) { return (*this = Value(value)); }
+inline Value& Value::operator=(void* value) { return (*this = Value(value)); }
+inline Value& Value::operator=(short value) { return (*this = Value(value)); }
+inline Value& Value::operator=(unsigned short value) { return (*this = Value(value)); }
+inline Value& Value::operator=(int value) { return (*this = Value(value)); }
+inline Value& Value::operator=(unsigned int value) { return (*this = Value(value)); }
+inline Value& Value::operator=(long value) { return (*this = Value(value)); }
+inline Value& Value::operator=(unsigned long value) { return (*this = Value(value)); }
+inline Value& Value::operator=(long long value) { return (*this = Value(value)); }
+inline Value& Value::operator=(unsigned long long value) { return (*this = Value(value)); }
+inline Value& Value::operator=(float value) { return (*this = Value(value)); }
+inline Value& Value::operator=(double value) { return (*this = Value(value)); }
+inline Value& Value::operator=(long double value) { return (*this = Value(value)); }
+inline Value& Value::operator=(const char* value) { return (*this = Value(value)); }
+inline Value& Value::operator=(const std::string &value) { return (*this = Value(value)); }
+inline Value& Value::operator=(const std::map<Value, Value> &value) { return (*this = Value(value)); }
+template <typename Ret, typename... Args>
+inline Value& Value::operator=(const std::function<Ret(Args...)> &value) { return (*this = Value(value)); }
+template <typename Ret, typename... Args>
+inline Value& Value::operator=(Ret (*value)(Args...)) { return (*this = Value(value)); }
+inline Value& Value::operator=(const LuaRef& value) { return (*this = Value(value)); }
+inline Value& Value::operator=(const std::vector<unsigned char> &value) { return (*this = Value(value)); }
 
-inline Value::operator bool() const { return bool_value(); }
-inline Value::operator int() const { return int_value(); }
-inline Value::operator long() const { return long_value(); }
-inline Value::operator double() const { return double_value(); }
-inline Value::operator std::string() const { return string_value(); }
-inline Value::operator std::map<Value, Value>() const { return table_value(); }
+inline bool Value::bool_value() const { return _value->bool_value(); }
+inline double Value::number_value() const { return _value->number_value(); }
+inline const std::string& Value::string_value() const { return _value->string_value(); }
+inline const std::map<Value, Value>& Value::table_value() const { return _value->table_value(); }
+template <typename Ret, typename... Args>
+inline const std::function<Ret(Args...)> Value::function_value() const
+{
+    FunctionValue* functionValue = dynamic_cast<FunctionValue*>(_value.get());
+    if(functionValue){
+        return functionValue->function_value<Ret, Args...>();
+    }
+    else{
+        CFunctionValue<Args...> *cfunctionValue = dynamic_cast<CFunctionValue<Args...>*>(_value.get());
+        if(cfunctionValue)
+            return cfunctionValue->template function_value<Ret>();
+    }
+    return std::function<Ret(Args...)>();
+}
+
+inline Value::operator bool() const { return _value->bool_value(); }
+inline Value::operator short() const { return _value->number_value(); }
+inline Value::operator unsigned short() const { return _value->number_value(); }
+inline Value::operator int() const { return _value->number_value(); }
+inline Value::operator unsigned int() const { return _value->number_value(); }
+inline Value::operator long() const { return _value->number_value(); }
+inline Value::operator unsigned long() const { return _value->number_value(); }
+inline Value::operator long long() const { return _value->number_value(); }
+inline Value::operator unsigned long long() const { return _value->number_value(); }
+inline Value::operator float() const { return _value->number_value(); }
+inline Value::operator double() const { return _value->number_value(); }
+inline Value::operator long double() const { return _value->number_value(); }
+inline Value::operator const std::string&() const { return _value->string_value(); }
+inline Value::operator const std::map<Value, Value>&() const { return _value->table_value(); }
+
+inline Value::Type Value::type() const { return _value->type(); }
+template <typename T>
+inline const T& Value::cast() const
+{
+    return *this;
+}
+
+template <typename T>
+inline const Value& Value::operator[] (const T &value) const
+{
+    static const Value fake;
+    const std::map<Value, Value>& table = _value->table_value();
+    auto it = table.find(Value(value));
+    if(it!=table.end())
+        return it->second;
+    else
+        return fake;
+}
 
 template <typename... Args>
 inline Value Value::operator()(Args... args) const {
@@ -304,15 +395,15 @@ inline bool Value::operator <(const Value &other) const {
             case Type::Nil:
                 return true;
             case Type::Boolean:
-                return bool_value() < other.bool_value();
+                return _value->bool_value() < other._value->bool_value();
             case Type::LightUserData:
-                return userdata_value() < other.userdata_value();
+                return _value->userdata_value() < other._value->userdata_value();
             case Type::Number:
-                return double_value() < other.double_value();
+                return _value->number_value() < other._value->number_value();
             case Type::String:
-                return string_value() < other.string_value();
+                return _value->string_value() < other._value->string_value();
             case Type::Table:
-                return table_value() < other.table_value();
+                return _value->table_value() < other._value->table_value();
             case Type::Function:
                 return _value.get() < other._value.get();
             case Type::UserData:
