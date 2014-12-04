@@ -64,6 +64,19 @@ inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, cons
     _push(l, value);
 }
     
+template <typename Ret, typename... Args, std::size_t... N>
+inline Ret _lift(std::function<Ret(Args...)> fun,
+                 const std::vector<sel::Value> &params,
+                 _indices<N...>) {
+    return fun(N<params.size()?Args(params[N]):Args()...);
+}
+
+template <typename Ret, typename... Args>
+inline Ret _lift(std::function<Ret(Args...)> fun,
+                 const std::vector<sel::Value> &params) {
+    return _lift(fun, params, typename _indices_builder<sizeof...(Args)>::type());
+}
+    
 }
 
 struct Statics {
@@ -87,6 +100,7 @@ public:
     virtual const std::string& string_value() const { return statics().empty_string; }
     virtual const std::map<Value, Value>& table_value() const { return statics().empty_table; }
     virtual const Value& operator[](const Value&) const { return statics().nil; }
+    virtual Value execute(const std::vector<sel::Value> &params) const { return statics().nil; }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const = 0;
 };
 
@@ -175,82 +189,46 @@ public:
     }
 };
 
-class FunctionValue : public BaseValue<Value::Type::Function, LuaRef> {
+template <typename Ret, typename... Args>
+class CFunctionValue: public BaseValue<Value::Type::Function, std::function<Ret(Args...)>>
+{
 public:
-    explicit FunctionValue(const LuaRef &value) : BaseValue(value) {}
-    template <typename... Args>
-    const Value operator()(Args... args) const{
+    explicit CFunctionValue(const std::function<Ret(Args...)> &function) : BaseValue<Value::Type::Function, std::function<Ret(Args...)>>(function) {}
+    virtual sel::Value execute(const std::vector<sel::Value> &params) const
+    {
+        return sel::Value(detail::_lift(this->_value, params));
+    }
+    
+    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
+        Registry *registry = detail::get_registry(l.get());
+        if(registry)
+            registry->Register(this->_value);
+    }
+};
+
+class LuaFunctionValue: public BaseValue<Value::Type::Function, LuaRef>
+{
+public:
+    explicit LuaFunctionValue(const LuaRef &value) : BaseValue(value) {}
+    virtual sel::Value execute(const std::vector<sel::Value> &params) const override {
         const std::shared_ptr<lua_State> &state = _value.GetState();
         _value.Push();
-        detail::_push_n(state, args...);
-        constexpr int num_args = sizeof...(Args);
-        lua_call(state.get(), num_args, 1);
+        for(auto const it:params)
+            detail::_push(state, it);
+        lua_call(state.get(), (int)params.size(), 1);
         Value ret = detail::_pop(detail::_id<Value>{}, state);
         lua_settop(state.get(), 0);
         return ret;
     }
+
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
         if(_value.GetState() == l)
             _value.Push();
         else
             detail::_push(l, nullptr);
     }
-template <typename Ret, typename... Args, class = typename std::enable_if<!std::is_void<Ret>::value>::type >
-    inline const std::function<Ret(Args...)> function_value() const
-    {
-        LuaRef ref = _value;
-        return [ref] (Args... args)
-        {
-            const std::shared_ptr<lua_State> &state = ref.GetState();
-            ref.Push();
-            detail::_push_n(state, args...);
-            constexpr int num_args = sizeof...(Args);
-            lua_call(state.get(), num_args, 1);
-            Ret ret = detail::_pop(detail::_id<Ret>{}, state);
-            lua_settop(state.get(), 0);
-            return ret;
-        };
-    }
-    template <typename Ret, typename... Args, class = typename std::enable_if<std::is_void<Ret>::value>::type>
-    inline const std::function<void(Args...)> function_value() const
-    {
-        LuaRef ref = _value;
-        return [ref] (Args... args)
-        {
-            const std::shared_ptr<lua_State> &state = ref.GetState();
-            ref.Push();
-            detail::_push_n(state, args...);
-            constexpr int num_args = sizeof...(Args);
-            lua_call(state.get(), num_args, 1);
-            lua_settop(state.get(), 0);
-        };
-    }
 };
 
-template <typename... Args>
-class CFunctionValue : public BaseValue<Value::Type::Function, std::function<Value(Args...)>> {
-public:
-    explicit CFunctionValue(const std::function<Value(Args...)> &value) : BaseValue<Value::Type::Function, std::function<Value(Args...)>>(value) {}
-    template <typename Ret>
-    explicit CFunctionValue(Ret (*value)(Args...)) : BaseValue<Value::Type::Function, std::function<Value(Args...)>>(value) {}
-    const Value operator()(Args... args) const{
-        return this->_value(args...);
-    }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
-        Registry *registry = detail::get_registry(l.get());
-        if(registry)
-            registry->Register(this->_value);
-    }
-    template <typename Ret>
-    inline const std::function<Ret(Args...)> function_value() const
-    {
-        auto ref = this->_value;
-        return [ref] (Args... args)
-        {
-            return static_cast<Ret>(ref(args...));
-        };
-    }
-};
 
 class UserDataValue : public BaseValue<Value::Type::UserData, std::vector<unsigned char>> {
 public:
@@ -289,11 +267,11 @@ inline Value::Value(long double value) : _value(std::make_shared<NumberValue>(va
 inline Value::Value(const char* value) : _value(std::make_shared<StringValue>(std::string(value))) {}
 inline Value::Value(const std::string &value) : _value(std::make_shared<StringValue>(value)) {}
 inline Value::Value(const std::map<Value, Value> &value) : _value(std::make_shared<TableValue>(value)) {}
-inline Value::Value(const LuaRef& ref) : _value(std::make_shared<FunctionValue>(ref)) {}
+inline Value::Value(const LuaRef& ref) : _value(std::make_shared<LuaFunctionValue>(ref)) {}
 template <typename Ret, typename... Args>
 inline Value::Value(const std::function<Ret(Args...)> &value) : _value(std::make_shared<CFunctionValue>(value)) {}
 template <typename Ret, typename... Args>
-inline Value::Value(Ret (*value)(Args...)) : _value(std::make_shared<CFunctionValue<Args...>>(value)) {}
+inline Value::Value(Ret (*value)(Args...)) : _value(std::make_shared<CFunctionValue<Ret, Args...>>(value)) {}
 inline Value::Value(const std::vector<unsigned char> &value) : _value(std::make_shared<UserDataValue>(value)) {}
 inline Value::Value(const Value &value) : _value(value._value) {}
 
@@ -327,16 +305,8 @@ inline const std::map<Value, Value>& Value::table_value() const { return _value-
 template <typename Ret, typename... Args>
 inline const std::function<Ret(Args...)> Value::function_value() const
 {
-    FunctionValue* functionValue = dynamic_cast<FunctionValue*>(_value.get());
-    if(functionValue){
-        return functionValue->function_value<Ret, Args...>();
-    }
-    else{
-        CFunctionValue<Args...> *cfunctionValue = dynamic_cast<CFunctionValue<Args...>*>(_value.get());
-        if(cfunctionValue)
-            return cfunctionValue->template function_value<Ret>();
-    }
-    return std::function<Ret(Args...)>();
+    auto value = _value;
+    return [value](Args... args) { return Ret(value->execute(std::vector<sel::Value>{sel::Value(args)...})); };
 }
 
 inline Value::operator bool() const { return _value->bool_value(); }
@@ -375,17 +345,7 @@ inline const Value& Value::operator[] (const T &value) const
 
 template <typename... Args>
 inline Value Value::operator()(Args... args) const {
-    FunctionValue* functionValue = dynamic_cast<FunctionValue*>(_value.get());
-    if(functionValue){
-        return (*functionValue)(args...);
-    }
-    else{
-        CFunctionValue<Args...> *cfunctionValue = dynamic_cast<CFunctionValue<Args...>*>(_value.get());
-        if(cfunctionValue)
-            return (*cfunctionValue)(args...);
-        else
-            return Value();
-    }
+    return _value->execute(std::vector<sel::Value>{sel::Value(args)...});
 }
 
 inline bool Value::operator <(const Value &other) const {
