@@ -40,7 +40,6 @@ public:
     typedef LuaType Type;
     
     Value();
-    Value(const Value& v);
     
     explicit Value(bool value);
     explicit Value(void* value);
@@ -57,7 +56,11 @@ public:
     explicit Value(long double value);
     explicit Value(const char* value);
     explicit Value(const std::string &value);
+    explicit Value(std::string &&value);
     explicit Value(const std::map<Value, Value> &value);
+    explicit Value(std::map<Value, Value> &&value);
+    explicit Value(const std::vector<Value> &value);
+    explicit Value(std::vector<Value> &&value);
     template <typename Ret, typename... Args>
     explicit Value(const std::function<Ret(Args...)> &fun);
     template <typename Ret, typename... Args>
@@ -85,7 +88,11 @@ public:
     Value& operator=(long double value);
     Value& operator=(const char* value);
     Value& operator=(const std::string &value);
+    Value& operator=(std::string &&value);
     Value& operator=(const std::map<Value, Value> &value);
+    Value& operator=(std::map<Value, Value> &&value);
+    Value& operator=(const std::vector<Value> &value);
+    Value& operator=(std::vector<Value> &&value);
     template <typename Ret, typename... Args>
     Value& operator=(const std::function<Ret(Args...)> &fun);
     template <typename Ret, typename... Args>
@@ -135,28 +142,28 @@ struct RegistryStorage
     Registry *registry;
     void *data;
     lua_Alloc function;
+    
+    static void *lua_allocator(void *ud, void *ptr, size_t osize, size_t nsize)
+    {
+        RegistryStorage *storage = reinterpret_cast<RegistryStorage*>(ud);
+        return storage->function(storage->data, ptr, osize, nsize);
+    }
+    
+    static void store_registry(lua_State *l, Registry *r)
+    {
+        void *data = nullptr;
+        lua_Alloc func = lua_getallocf(l, &data);
+        RegistryStorage *storage = new RegistryStorage{r, data, func};
+        lua_setallocf(l, &lua_allocator, storage);
+    }
+    
+    static Registry * get_registry(lua_State *l)
+    {
+        void *data = nullptr;
+        lua_getallocf(l, &data);
+        return reinterpret_cast<RegistryStorage*>(data)->registry;
+    }
 };
-    
-void *lua_allocator(void *ud, void *ptr, size_t osize, size_t nsize)
-{
-    RegistryStorage *storage = reinterpret_cast<RegistryStorage*>(ud);
-    return storage->function(storage->data, ptr, osize, nsize);
-}
-    
-void store_registry(lua_State *l, Registry *r)
-{
-    void *data = nullptr;
-    lua_Alloc func = lua_getallocf(l, &data);
-    RegistryStorage *storage = new RegistryStorage{r, data, func};
-    lua_setallocf(l, &lua_allocator, storage);
-}
-    
-Registry * get_registry(lua_State *l)
-{
-    void *data = nullptr;
-    lua_getallocf(l, &data);
-    return reinterpret_cast<RegistryStorage*>(data)->registry;
-}
 
 template <typename T>
 struct is_primitive {
@@ -470,6 +477,18 @@ inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, long
 }
 
 inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, unsigned long u) {
+#if LUA_VERSION_NUM >= 502
+    lua_pushunsigned(l.get(), static_cast<lua_Unsigned>(u));
+#else
+    lua_pushinteger(l.get(), static_cast<lua_Integer>(u));
+#endif
+}
+    
+inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, long long i) {
+    lua_pushinteger(l.get(), i);
+}
+
+inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, unsigned long long u) {
 #if LUA_VERSION_NUM >= 502
     lua_pushunsigned(l.get(), static_cast<lua_Unsigned>(u));
 #else

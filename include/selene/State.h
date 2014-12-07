@@ -57,12 +57,12 @@ public:
     State() : State(false) {}
     State(bool should_open_libs):_l(std::shared_ptr<lua_State>(luaL_newstate(), LuaStateOwnerDeleter())), _registry(new Registry(_l)) {
         if (_l == nullptr) throw 0;
-        detail::store_registry(_l.get(), _registry);
+        detail::RegistryStorage::store_registry(_l.get(), _registry);
         if (should_open_libs) luaL_openlibs(_l.get());
         lua_atpanic(_l.get(), atpanic);
     }
     State(lua_State *l): _l(std::shared_ptr<lua_State>(l, LuaStateDeleter())), _registry(new Registry(_l)) {
-        detail::store_registry(_l.get(), _registry);
+        detail::RegistryStorage::store_registry(_l.get(), _registry);
         lua_atpanic(_l.get(), atpanic);
     }
     State(const State &other) = delete;

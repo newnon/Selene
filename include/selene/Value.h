@@ -174,6 +174,23 @@ class TableValue : public BaseValue<Value::Type::Table, std::map<Value, Value>> 
 public:
     explicit TableValue(const std::map<Value, Value> &value) : BaseValue(value) {}
     explicit TableValue(std::map<Value, Value> &&value) : BaseValue(std::move(value)) {}
+    explicit TableValue(const std::vector<Value> &value) : BaseValue(std::map<Value, Value>())
+    {
+        int counter = 1;
+        for(const auto &it:value)
+        {
+            _value.emplace(Value(counter), it);
+        }
+    }
+    explicit TableValue(std::vector<Value> &&value) : BaseValue(std::map<Value, Value>())
+    {
+        int counter = 1;
+        for(const auto &it:value)
+        {
+            _value.emplace(Value(counter), std::move(it));
+        }
+    }
+
     virtual inline const std::map<Value, Value>& table_value() const override { return _value; }
     virtual inline Value& operator[](const Value &value) { return this->_value[value]; }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
@@ -200,7 +217,7 @@ public:
     }
     
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
-        Registry *registry = detail::get_registry(l.get());
+        Registry *registry = detail::RegistryStorage::get_registry(l.get());
         if(registry)
             registry->Register(this->_value);
     }
@@ -266,14 +283,17 @@ inline Value::Value(double value) : _value(std::make_shared<NumberValue>(value))
 inline Value::Value(long double value) : _value(std::make_shared<NumberValue>(value)) {}
 inline Value::Value(const char* value) : _value(std::make_shared<StringValue>(std::string(value))) {}
 inline Value::Value(const std::string &value) : _value(std::make_shared<StringValue>(value)) {}
+inline Value::Value(std::string &&value) : _value(std::make_shared<StringValue>(std::move(value))) {}
 inline Value::Value(const std::map<Value, Value> &value) : _value(std::make_shared<TableValue>(value)) {}
+inline Value::Value(std::map<Value, Value> &&value) : _value(std::make_shared<TableValue>(std::move(value))) {}
+inline Value::Value(const std::vector<Value> &value) : _value(std::make_shared<TableValue>(value)) {}
+inline Value::Value(std::vector<Value> &&value) : _value(std::make_shared<TableValue>(std::move(value))) {}
 inline Value::Value(const LuaRef& ref) : _value(std::make_shared<LuaFunctionValue>(ref)) {}
 template <typename Ret, typename... Args>
 inline Value::Value(const std::function<Ret(Args...)> &value) : _value(std::make_shared<CFunctionValue>(value)) {}
 template <typename Ret, typename... Args>
 inline Value::Value(Ret (*value)(Args...)) : _value(std::make_shared<CFunctionValue<Ret, Args...>>(value)) {}
 inline Value::Value(const std::vector<unsigned char> &value) : _value(std::make_shared<UserDataValue>(value)) {}
-inline Value::Value(const Value &value) : _value(value._value) {}
 
 inline Value& Value::operator=(bool value) { return (*this = Value(value)); }
 inline Value& Value::operator=(void* value) { return (*this = Value(value)); }
@@ -290,7 +310,11 @@ inline Value& Value::operator=(double value) { return (*this = Value(value)); }
 inline Value& Value::operator=(long double value) { return (*this = Value(value)); }
 inline Value& Value::operator=(const char* value) { return (*this = Value(value)); }
 inline Value& Value::operator=(const std::string &value) { return (*this = Value(value)); }
+inline Value& Value::operator=(std::string &&value) { return (*this = Value(value)); }
 inline Value& Value::operator=(const std::map<Value, Value> &value) { return (*this = Value(value)); }
+inline Value& Value::operator=(std::map<Value, Value> &&value) { return (*this = Value(value)); }
+inline Value& Value::operator=(const std::vector<Value> &value) { return (*this = Value(value)); }
+inline Value& Value::operator=(std::vector<Value> &&value) { return (*this = Value(value)); }
 template <typename Ret, typename... Args>
 inline Value& Value::operator=(const std::function<Ret(Args...)> &value) { return (*this = Value(value)); }
 template <typename Ret, typename... Args>
