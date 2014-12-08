@@ -92,6 +92,7 @@ inline Statics& statics() {
 
 class LuaValue {
 public:
+    virtual LuaValue* clone() const = 0;
     virtual ~LuaValue() {}
     virtual Value::Type type() const = 0;
     virtual bool bool_value() const { return '\0'; }
@@ -122,6 +123,7 @@ protected:
 class NilValue : public BaseValue<Value::Type::Nil, std::nullptr_t> {
 public:
     explicit NilValue() : BaseValue(nullptr) {}
+    virtual LuaValue* clone() const override { return new NilValue(); }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
         detail::_push(l, nullptr);
     }
@@ -130,6 +132,7 @@ public:
 class BoolValue : public BaseValue<Value::Type::Boolean, bool> {
 public:
     explicit BoolValue(bool value) : BaseValue(value) {}
+    virtual LuaValue* clone() const override { return new BoolValue(_value); }
     virtual inline bool bool_value() const override { return static_cast<bool>(_value); }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
         detail::_push(l, _value);
@@ -139,6 +142,7 @@ public:
 class LightUserDataValue : public BaseValue<Value::Type::LightUserData, void*> {
 public:
     explicit LightUserDataValue(void* value) : BaseValue(value) {}
+    virtual LuaValue* clone() const override { return new LightUserDataValue(_value); }
     virtual inline bool bool_value() const override { return static_cast<bool>(_value); }
     virtual void* userdata_value() const { return _value; }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
@@ -149,6 +153,7 @@ public:
 class NumberValue : public BaseValue<Value::Type::Number, double> {
 public:
     explicit NumberValue(double value) : BaseValue(value) {}
+    virtual LuaValue* clone() const override { return new NumberValue(_value); }
     virtual inline double number_value() const override { return static_cast<double>(_value); }
     virtual inline const std::string& string_value() const override { return _temp = std::to_string(_value); }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
@@ -163,6 +168,7 @@ class StringValue : public BaseValue<Value::Type::String, std::string> {
 public:
     explicit StringValue(const std::string &value) : BaseValue(value) {}
     explicit StringValue(std::string &&value) : BaseValue(std::move(value)) {}
+    virtual LuaValue* clone() const override { return new StringValue(_value); }
     virtual inline double number_value() const override { return static_cast<double>(std::stod(_value)); }
     virtual inline const std::string& string_value() const override { return _value; }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
@@ -190,6 +196,8 @@ public:
             _value.emplace(Value(counter), std::move(it));
         }
     }
+    
+    virtual LuaValue* clone() const override { return new TableValue(_value); }
 
     virtual inline const std::map<Value, Value>& table_value() const override { return _value; }
     virtual inline Value& operator[](const Value &value) { return this->_value[value]; }
@@ -211,6 +219,7 @@ class CFunctionValue: public BaseValue<Value::Type::Function, std::function<Ret(
 {
 public:
     explicit CFunctionValue(const std::function<Ret(Args...)> &function) : BaseValue<Value::Type::Function, std::function<Ret(Args...)>>(function) {}
+    virtual LuaValue* clone() const override { return new CFunctionValue<Ret, Args...>(this->_value); }
     virtual sel::Value execute(const std::vector<sel::Value> &params) const
     {
         return sel::Value(detail::_lift(this->_value, params));
@@ -227,6 +236,7 @@ class LuaFunctionValue: public BaseValue<Value::Type::Function, LuaRef>
 {
 public:
     explicit LuaFunctionValue(const LuaRef &value) : BaseValue(value) {}
+    virtual LuaValue* clone() const override { return new LuaFunctionValue(_value); }
     virtual sel::Value execute(const std::vector<sel::Value> &params) const override {
         const std::shared_ptr<lua_State> &state = _value.GetState();
         _value.Push();
@@ -250,6 +260,7 @@ public:
 class UserDataValue : public BaseValue<Value::Type::UserData, std::vector<unsigned char>> {
 public:
     explicit UserDataValue(const std::vector<unsigned char> &value) : BaseValue(value) {}
+    virtual LuaValue* clone() const override { return new UserDataValue(_value); }
     virtual const void* userdata_value() const { return &_value.front(); }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override
     {
@@ -261,11 +272,15 @@ public:
 class ThreadValue : public BaseValue<Value::Type::Thread, std::nullptr_t> {
 public:
     explicit ThreadValue() : BaseValue(nullptr) {}
+    virtual LuaValue* clone() const override { return new ThreadValue(); }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override
     {
         detail::_push(l, nullptr);
     }
 };
+
+inline Value::Value(const Value &other) { _value.reset(other._value->clone()); }
+inline Value::Value(Value &&other) { _value = std::move(other._value); }
 
 inline Value::Value() : _value(std::make_shared<NilValue>()) {}
 inline Value::Value(bool value) : _value(std::make_shared<BoolValue>(value)) {}
@@ -290,10 +305,13 @@ inline Value::Value(const std::vector<Value> &value) : _value(std::make_shared<T
 inline Value::Value(std::vector<Value> &&value) : _value(std::make_shared<TableValue>(std::move(value))) {}
 inline Value::Value(const LuaRef& ref) : _value(std::make_shared<LuaFunctionValue>(ref)) {}
 template <typename Ret, typename... Args>
-inline Value::Value(const std::function<Ret(Args...)> &value) : _value(std::make_shared<CFunctionValue>(value)) {}
+inline Value::Value(const std::function<Ret(Args...)> &value) : _value(std::make_shared<CFunctionValue<Ret, Args...>>(value)) {}
 template <typename Ret, typename... Args>
 inline Value::Value(Ret (*value)(Args...)) : _value(std::make_shared<CFunctionValue<Ret, Args...>>(value)) {}
 inline Value::Value(const std::vector<unsigned char> &value) : _value(std::make_shared<UserDataValue>(value)) {}
+
+inline Value& Value::operator=(const Value &other){ _value.reset(other._value->clone()); return *this; }
+inline Value& Value::operator=(Value &&other){ _value = std::move(other._value); return *this; }
 
 inline Value& Value::operator=(bool value) { return (*this = Value(value)); }
 inline Value& Value::operator=(void* value) { return (*this = Value(value)); }
@@ -350,9 +368,9 @@ inline Value::operator const std::map<Value, Value>&() const { return _value->ta
 
 inline Value::Type Value::type() const { return _value->type(); }
 template <typename T>
-inline const T& Value::cast() const
+inline const T Value::cast() const
 {
-    return *this;
+    return static_cast<T>(*this);
 }
 
 template <typename T>

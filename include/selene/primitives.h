@@ -40,6 +40,8 @@ public:
     typedef LuaType Type;
     
     Value();
+    Value(const Value &other);
+    Value(Value &&other);
     
     explicit Value(bool value);
     explicit Value(void* value);
@@ -71,8 +73,10 @@ public:
     inline bool Is(Type type) const { return this->type() == type; }
     inline Type type() const;
     template <typename T>
-    const T& cast() const;
+    const T cast() const;
     
+    Value& operator=(const Value &other);
+    Value& operator=(Value &&other);
     Value& operator=(bool value);
     Value& operator=(void* value);
     Value& operator=(short value);
