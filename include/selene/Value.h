@@ -35,6 +35,7 @@ inline Value _get(_id<Value>, const std::shared_ptr<lua_State> &l, const int ind
                 return Value(t);
             }
         case LUA_TFUNCTION:
+            lua_pushvalue(l.get(), -1);
             return Value(LuaRef{l, luaL_ref(l.get(), LUA_REGISTRYINDEX)});
         case LUA_TUSERDATA: {
             std::vector<unsigned char> copy;
