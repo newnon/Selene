@@ -145,7 +145,7 @@ public:
     explicit LightUserDataValue(void* value) : BaseValue(value) {}
     virtual LuaValue* clone() const override { return new LightUserDataValue(_value); }
     virtual inline bool bool_value() const override { return static_cast<bool>(_value); }
-    virtual void* userdata_value() const { return _value; }
+    virtual const void* userdata_value() const { return _value; }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
         detail::_push(l, _value);
     }
