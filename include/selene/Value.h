@@ -204,7 +204,7 @@ public:
     virtual inline Value& operator[](const Value &value) { return this->_value[value]; }
     virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
         lua_createtable(l.get(), 0, 0);
-        for (auto item : _value) {
+        for (const auto &item : _value) {
             if(!item.first.Is(Value::Type::Nil) && !item.second.Is(Value::Type::Nil))
             {
                 detail::_push(l, item.first);
