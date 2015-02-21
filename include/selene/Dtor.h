@@ -8,7 +8,7 @@ template <typename T>
 class Dtor : public BaseFun {
 private:
     std::string _metatable_name;
-    const std::shared_ptr<lua_State>& _state;
+    const std::weak_ptr<lua_State> _state;
 public:
     Dtor(const std::shared_ptr<lua_State> &l,
          const std::string &metatable_name)
@@ -19,7 +19,7 @@ public:
     }
 
     int Apply() override {
-        T *t = (T *)luaL_checkudata(_state.get(), 1, _metatable_name.c_str());
+        T *t = (T *)luaL_checkudata(_state.lock().get(), 1, _metatable_name.c_str());
         t->~T();
         return 0;
     }

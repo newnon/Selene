@@ -44,9 +44,10 @@ private:
     std::vector<std::unique_ptr<BaseFun>> _funs;
     std::vector<std::unique_ptr<BaseObj>> _objs;
     std::vector<std::unique_ptr<BaseClass>> _classes;
-    const std::shared_ptr<lua_State> &_state;
+    const std::weak_ptr<lua_State> _state;
 public:
     Registry(const std::shared_ptr<lua_State> &state):_state(state) {}
+    ~Registry() {}
 
     template <typename L>
     void Register(L lambda) {
@@ -57,7 +58,7 @@ public:
     void Register(std::function<Ret(Args...)> fun) {
         constexpr int arity = detail::_arity<Ret>::value;
         auto tmp = std::unique_ptr<BaseFun>(
-            new Fun<arity, Ret, Args...>{_state, _metatables, fun});
+            new Fun<arity, Ret, Args...>{_state.lock(), _metatables, fun});
         _funs.push_back(std::move(tmp));
     }
 
@@ -65,7 +66,7 @@ public:
     void Register(Ret (*fun)(Args...)) {
         constexpr int arity = detail::_arity<Ret>::value;
         auto tmp = std::unique_ptr<BaseFun>(
-            new Fun<arity, Ret, Args...>{_state, _metatables, fun});
+            new Fun<arity, Ret, Args...>{_state.lock(), _metatables, fun});
         _funs.push_back(std::move(tmp));
     }
 
@@ -83,7 +84,7 @@ public:
     template <typename T, typename... Funs>
     void RegisterObj(T &t, Funs... funs) {
         auto tmp = std::unique_ptr<BaseObj>(
-            new Obj<T, Funs...>{_state, &t, funs...});
+            new Obj<T, Funs...>{_state.lock(), &t, funs...});
         _objs.push_back(std::move(tmp));
     }
 
@@ -97,7 +98,7 @@ public:
     void RegisterClassWorker(const std::string &name, Funs... funs) {
         auto tmp = std::unique_ptr<BaseClass>(
             new Class<T, Ctor<T, CtorArgs...>, Funs...>
-            {_state, _metatables, name, funs...});
+            {_state.lock(), _metatables, name, funs...});
         _classes.push_back(std::move(tmp));
     }
 };

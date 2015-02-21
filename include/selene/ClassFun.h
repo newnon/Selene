@@ -12,7 +12,7 @@ private:
     _fun_type _fun;
     std::string _name;
     std::string _metatable_name;
-    const std::shared_ptr<lua_State>& _state;
+    const std::weak_ptr<lua_State> _state;
 
     T *_get(const std::shared_ptr<lua_State> &state) {
         T *ret = (T *)luaL_checkudata(state.get(), 1, _metatable_name.c_str());
@@ -38,8 +38,8 @@ public:
     }
 
     int Apply() override {
-        std::tuple<T*> t = std::make_tuple(_get(_state));
-        std::tuple<Args...> args = detail::_get_args<Args...>((_state));
+        std::tuple<T*> t = std::make_tuple(_get(_state.lock()));
+        std::tuple<Args...> args = detail::_get_args<Args...>((_state.lock()));
         std::tuple<T*, Args...> pack = std::tuple_cat(t, args);
         Ret value = detail::_lift(_fun, pack);
         detail::_push(_state, std::forward<Ret>(value));
@@ -54,7 +54,7 @@ private:
     _fun_type _fun;
     std::string _name;
     std::string _metatable_name;
-    const std::shared_ptr<lua_State>& _state;
+    const std::weak_ptr<lua_State> _state;
 
     T *_get(const std::shared_ptr<lua_State> &state) {
         T *ret = (T *)luaL_checkudata(state.get(), 1, _metatable_name.c_str());
@@ -80,8 +80,8 @@ public:
     }
 
     int Apply() override {
-        std::tuple<T*> t = std::make_tuple(_get(_state));
-        std::tuple<Args...> args = detail::_get_args<Args...>(_state);
+        std::tuple<T*> t = std::make_tuple(_get(_state.lock()));
+        std::tuple<Args...> args = detail::_get_args<Args...>(_state.lock());
         std::tuple<T*, Args...> pack = std::tuple_cat(t, args);
         detail::_lift(_fun, pack);
         return 0;

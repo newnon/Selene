@@ -9,7 +9,7 @@ class Ctor : public BaseFun {
 private:
     using _ctor_type = std::function<void(const std::shared_ptr<lua_State> &, Args...)>;
     _ctor_type _ctor;
-    const std::shared_ptr<lua_State>& _state;
+    const std::weak_ptr<lua_State> _state;
 public:
     Ctor(const std::shared_ptr<lua_State> &l,
          const std::string &metatable_name):_state(l) {
@@ -24,8 +24,8 @@ public:
     }
 
     int Apply() override {
-        std::tuple<Args...> args = detail::_get_args<Args...>(_state);
-        auto pack = std::tuple_cat(std::make_tuple(std::cref(_state)), args);
+        std::tuple<Args...> args = detail::_get_args<Args...>(_state.lock());
+        auto pack = std::tuple_cat(std::make_tuple(std::cref(_state.lock())), args);
         detail::_lift(_ctor, pack);
         // The constructor will leave a single userdata entry on the stack
         return 1;
