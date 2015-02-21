@@ -134,7 +134,7 @@ public:
     bool operator <(const Value &other) const;
     void push(const std::shared_ptr<lua_State> &l) const;
 private:
-    std::shared_ptr<LuaValue> _value;
+    std::unique_ptr<LuaValue> _value;
 };
 
 class Registry;

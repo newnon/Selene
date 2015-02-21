@@ -280,36 +280,42 @@ public:
     }
 };
 
+template<class _Tp, class ..._Args>
+std::unique_ptr<_Tp> sel_make_unique(_Args&& ...__args)
+{
+    return std::unique_ptr<_Tp>(new _Tp(__args...));
+}
+
 inline Value::Value(const Value &other) { _value.reset(other._value->clone()); }
 inline Value::Value(Value &&other) { _value = std::move(other._value); }
 
-inline Value::Value() : _value(std::make_shared<NilValue>()) {}
-inline Value::Value(bool value) : _value(std::make_shared<BoolValue>(value)) {}
-inline Value::Value(void *value) : _value(std::make_shared<LightUserDataValue>(value)) {}
-inline Value::Value(short value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(unsigned short value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(int value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(unsigned int value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(long value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(unsigned long value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(long long value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(unsigned long long value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(float value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(double value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(long double value) : _value(std::make_shared<NumberValue>(value)) {}
-inline Value::Value(const char* value) : _value(std::make_shared<StringValue>(std::string(value))) {}
-inline Value::Value(const std::string &value) : _value(std::make_shared<StringValue>(value)) {}
-inline Value::Value(std::string &&value) : _value(std::make_shared<StringValue>(std::move(value))) {}
-inline Value::Value(const std::map<Value, Value> &value) : _value(std::make_shared<TableValue>(value)) {}
-inline Value::Value(std::map<Value, Value> &&value) : _value(std::make_shared<TableValue>(std::move(value))) {}
-inline Value::Value(const std::vector<Value> &value) : _value(std::make_shared<TableValue>(value)) {}
-inline Value::Value(std::vector<Value> &&value) : _value(std::make_shared<TableValue>(std::move(value))) {}
-inline Value::Value(const LuaRef& ref) : _value(std::make_shared<LuaFunctionValue>(ref)) {}
+inline Value::Value() : _value(sel_make_unique<NilValue>()) {}
+inline Value::Value(bool value) : _value(sel_make_unique<BoolValue>(value)) {}
+inline Value::Value(void *value) : _value(sel_make_unique<LightUserDataValue>(value)) {}
+inline Value::Value(short value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(unsigned short value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(int value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(unsigned int value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(long value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(unsigned long value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(long long value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(unsigned long long value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(float value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(double value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(long double value) : _value(sel_make_unique<NumberValue>(value)) {}
+inline Value::Value(const char* value) : _value(sel_make_unique<StringValue>(std::string(value))) {}
+inline Value::Value(const std::string &value) : _value(sel_make_unique<StringValue>(value)) {}
+inline Value::Value(std::string &&value) : _value(sel_make_unique<StringValue>(std::move(value))) {}
+inline Value::Value(const std::map<Value, Value> &value) : _value(sel_make_unique<TableValue>(value)) {}
+inline Value::Value(std::map<Value, Value> &&value) : _value(sel_make_unique<TableValue>(std::move(value))) {}
+inline Value::Value(const std::vector<Value> &value) : _value(sel_make_unique<TableValue>(value)) {}
+inline Value::Value(std::vector<Value> &&value) : _value(sel_make_unique<TableValue>(std::move(value))) {}
+inline Value::Value(const LuaRef& ref) : _value(sel_make_unique<LuaFunctionValue>(ref)) {}
 template <typename Ret, typename... Args>
-inline Value::Value(const std::function<Ret(Args...)> &value) : _value(std::make_shared<CFunctionValue<Ret, Args...>>(value)) {}
+inline Value::Value(const std::function<Ret(Args...)> &value) : _value(sel_make_unique<CFunctionValue<Ret, Args...>>(value)) {}
 template <typename Ret, typename... Args>
-inline Value::Value(Ret (*value)(Args...)) : _value(std::make_shared<CFunctionValue<Ret, Args...>>(value)) {}
-inline Value::Value(const std::vector<unsigned char> &value) : _value(std::make_shared<UserDataValue>(value)) {}
+inline Value::Value(Ret (*value)(Args...)) : _value(sel_make_unique<CFunctionValue<Ret, Args...>>(value)) {}
+inline Value::Value(const std::vector<unsigned char> &value) : _value(sel_make_unique<UserDataValue>(value)) {}
 
 inline Value& Value::operator=(const Value &other){ _value.reset(other._value->clone()); return *this; }
 inline Value& Value::operator=(Value &&other){ _value = std::move(other._value); return *this; }
@@ -348,8 +354,8 @@ inline const std::map<Value, Value>& Value::table_value() const { return _value-
 template <typename Ret, typename... Args>
 inline const std::function<Ret(Args...)> Value::function_value() const
 {
-    auto value = _value;
-    return [value](Args... args) { return Ret(value->execute(std::vector<sel::Value>{sel::Value(args)...})); };
+    Value value = *this;
+    return [value](Args... args) { return Ret(value._value->execute(std::vector<sel::Value>{sel::Value(args)...})); };
 }
 
 inline Value::operator bool() const { return _value->bool_value(); }
