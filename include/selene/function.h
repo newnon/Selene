@@ -18,18 +18,18 @@ class function<R(Args...)> {
 private:
     LuaRef _ref;
 public:
-    function(int ref, const std::shared_ptr<lua_State> &state) : _ref(state, ref) {}
+    function(int ref, const detail::StateBlock &state) : _ref(state, ref) {}
     function(const LuaRef &ref) : _ref(ref) {}
 
     R operator()(Args... args) {
-        int handler_index = SetErrorHandler(_ref.GetState().get());
+        int handler_index = SetErrorHandler(_ref.GetStateBlock()->GetState());
         _ref.Push();
-        detail::_push_n(_ref.GetState(), args...);
+        detail::_push_n(_ref.GetStateBlock(), args...);
         constexpr int num_args = sizeof...(Args);
-        lua_pcall(_ref.GetState().get(), num_args, 1, handler_index);
-        lua_remove(_ref.GetState().get(), handler_index);
-        R ret = detail::_pop(detail::_id<R>{}, _ref.GetState()).get();
-        lua_settop(_ref.GetState().get(), 0);
+        lua_pcall(_ref.GetStateBlock()->GetState(), num_args, 1, handler_index);
+        lua_remove(_ref.GetStateBlock()->GetState(), handler_index);
+        R ret = detail::_pop(detail::_id<R>{}, _ref.GetStateBlock());
+        lua_settop(_ref.GetStateBlock()->GetState(), 0);
         return ret;
     }
 
@@ -43,17 +43,17 @@ class function<void(Args...)> {
 private:
     LuaRef _ref;
 public:
-    function(int ref, const std::shared_ptr<lua_State> &state) : _ref(state, ref) {}
+    function(int ref, const detail::StateBlock &state) : _ref(state, ref) {}
     function(const LuaRef &ref) : _ref(ref) {}
 
     void operator()(Args... args) {
-        int handler_index = SetErrorHandler(_ref.GetState().get());
+        int handler_index = SetErrorHandler(_ref.GetStateBlock()->GetState());
         _ref.Push();
-        detail::_push_n(_ref.GetState(), args...);
+        detail::_push_n(_ref.GetStateBlock(), args...);
         constexpr int num_args = sizeof...(Args);
-        lua_pcall(_ref.GetState().get(), num_args, 1, handler_index);
-        lua_remove(_ref.GetState().get(), handler_index);
-        lua_settop(_ref.GetState().get(), 0);
+        lua_pcall(_ref.GetStateBlock()->GetState(), num_args, 1, handler_index);
+        lua_remove(_ref.GetStateBlock()->GetState(), handler_index);
+        lua_settop(_ref.GetStateBlock()->GetState(), 0);
     }
 
     void Push() {
@@ -67,18 +67,18 @@ class function<std::tuple<R...>(Args...)> {
 private:
     LuaRef _ref;
 public:
-    function(int ref, const std::shared_ptr<lua_State> &state) : _ref(state, ref) {}
+    function(int ref, const detail::StateBlock &state) : _ref(state, ref) {}
     function(const LuaRef &ref) : _ref(ref) {}
 
     std::tuple<R...> operator()(Args... args) {
-        int handler_index = SetErrorHandler(_ref.GetState().get());
+        int handler_index = SetErrorHandler(_ref.GetStateBlock()->GetState());
         _ref.Push();
-        detail::_push_n(_ref.GetState(), args...);
+        detail::_push_n(_ref.GetStateBlock(), args...);
         constexpr int num_args = sizeof...(Args);
         constexpr int num_ret = sizeof...(R);
-        lua_pcall(_ref.GetState().get(), num_args, num_ret, handler_index);
-        lua_remove(_ref.GetState().get(), handler_index);
-        return detail::_pop_n_reset<R...>(_ref.GetState());
+        lua_pcall(_ref.GetStateBlock()->GetState(), num_args, num_ret, handler_index);
+        lua_remove(_ref.GetStateBlock()->GetState(), handler_index);
+        return detail::_pop_n_reset<R...>(_ref.GetStateBlock());
     }
 
     void Push() {

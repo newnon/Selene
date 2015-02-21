@@ -12,19 +12,19 @@ namespace detail {
 
 template <typename R, typename...Args>
 inline sel::function<R(Args...)> _check_get(_id<sel::function<R(Args...)>>,
-                                            const std::shared_ptr<lua_State> &l, const int index) {
-    lua_pushvalue(l.get(), index);
-    return sel::function<R(Args...)>{luaL_ref(l.get(), LUA_REGISTRYINDEX), l};
+                                            const detail::StateBlock &l, const int index) {
+    lua_pushvalue(l.GetState(), index);
+    return sel::function<R(Args...)>{luaL_ref(l.GetState(), LUA_REGISTRYINDEX), l};
 }
 
 template <typename R, typename... Args>
 inline sel::function<R(Args...)> _get(_id<sel::function<R(Args...)>> id,
-                                      const std::shared_ptr<lua_State> &l, const int index) {
+                                      const detail::StateBlock &l, const int index) {
     return _check_get(id, l, index);
 }
 
 template <typename R, typename... Args>
-inline void _push(const std::shared_ptr<lua_State> &l, sel::function<R(Args...)> fun) {
+inline void _push(const detail::StateBlock &l, sel::function<R(Args...)> fun) {
     fun.Push();
 }
 

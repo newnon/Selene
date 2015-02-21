@@ -37,6 +37,9 @@ template <typename T, typename Ret, typename... Args>
 struct lambda_traits<Ret(T::*)(Args...) const> {
     using Fun = std::function<Ret(Args...)>;
 };
+
+class StateBlock;
+
 }
 class Registry {
 private:
@@ -44,9 +47,9 @@ private:
     std::vector<std::unique_ptr<BaseFun>> _funs;
     std::vector<std::unique_ptr<BaseObj>> _objs;
     std::vector<std::unique_ptr<BaseClass>> _classes;
-    const std::weak_ptr<lua_State> _state;
+    const detail::StateBlock &_stateBlock;
 public:
-    Registry(const std::shared_ptr<lua_State> &state):_state(state) {}
+    Registry(detail::StateBlock &stateBlock):_stateBlock(stateBlock) {}
     ~Registry() {}
 
     template <typename L>
@@ -58,7 +61,7 @@ public:
     void Register(std::function<Ret(Args...)> fun) {
         constexpr int arity = detail::_arity<Ret>::value;
         auto tmp = std::unique_ptr<BaseFun>(
-            new Fun<arity, Ret, Args...>{_state.lock(), _metatables, fun});
+            new Fun<arity, Ret, Args...>{_stateBlock, _metatables, fun});
         _funs.push_back(std::move(tmp));
     }
 
@@ -66,7 +69,7 @@ public:
     void Register(Ret (*fun)(Args...)) {
         constexpr int arity = detail::_arity<Ret>::value;
         auto tmp = std::unique_ptr<BaseFun>(
-            new Fun<arity, Ret, Args...>{_state.lock(), _metatables, fun});
+            new Fun<arity, Ret, Args...>{_stateBlock, _metatables, fun});
         _funs.push_back(std::move(tmp));
     }
 
@@ -84,7 +87,7 @@ public:
     template <typename T, typename... Funs>
     void RegisterObj(T &t, Funs... funs) {
         auto tmp = std::unique_ptr<BaseObj>(
-            new Obj<T, Funs...>{_state.lock(), &t, funs...});
+            new Obj<T, Funs...>{_stateBlock, &t, funs...});
         _objs.push_back(std::move(tmp));
     }
 
@@ -98,8 +101,22 @@ public:
     void RegisterClassWorker(const std::string &name, Funs... funs) {
         auto tmp = std::unique_ptr<BaseClass>(
             new Class<T, Ctor<T, CtorArgs...>, Funs...>
-            {_state.lock(), _metatables, name, funs...});
+            {_stateBlock, _metatables, name, funs...});
         _classes.push_back(std::move(tmp));
     }
 };
+
+namespace detail {
+inline StateBlock::StateBlock(lua_State *state, bool owned):_state(state),_owned(owned) {
+    _registry = new Registry(*this);
+}
+inline StateBlock::~StateBlock() {
+    if(_owned) {
+        lua_gc(_state, LUA_GCCOLLECT, 0);
+        lua_close(_state);
+    }
+    delete _registry;
+}
+}
+
 }

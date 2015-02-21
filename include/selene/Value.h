@@ -11,36 +11,36 @@ namespace sel {
    
 namespace detail {
     
-inline Value _get(_id<Value>, const std::shared_ptr<lua_State> &l, const int index) {
-    switch (lua_type(l.get(), index)) {
+inline Value _get(_id<Value>, const detail::StateBlock &l, const int index) {
+    switch (lua_type(l.GetState(), index)) {
         case LUA_TNIL:
             return Value();
         case LUA_TBOOLEAN:
             return Value(_get(_id<bool>{}, l, index));
         case LUA_TLIGHTUSERDATA:
-            return Value(lua_touserdata(l.get(), index));
+            return Value(lua_touserdata(l.GetState(), index));
         case LUA_TNUMBER:
             return Value(_get(_id<double>{}, l, index));
         case LUA_TSTRING:
             return Value(_get(_id<std::string>{}, l, index));
         case LUA_TTABLE: {
                 std::map<Value, Value> t;
-                luaL_checktype(l.get(), index, LUA_TTABLE);
-                lua_pushnil(l.get());
-                while (lua_next(l.get(), -2)) {
+                luaL_checktype(l.GetState(), index, LUA_TTABLE);
+                lua_pushnil(l.GetState());
+                while (lua_next(l.GetState(), -2)) {
                     Value idx = _get(_id<Value>{}, l, -2);
                     t[idx] = _get(_id<Value>{}, l, -1);
-                    lua_pop(l.get(), 1);
+                    lua_pop(l.GetState(), 1);
                 }
                 return Value(t);
             }
         case LUA_TFUNCTION:
-            lua_pushvalue(l.get(), -1);
-            return Value(LuaRef{l, luaL_ref(l.get(), LUA_REGISTRYINDEX)});
+            lua_pushvalue(l.GetState(), -1);
+            return Value(LuaRef{l, luaL_ref(l.GetState(), LUA_REGISTRYINDEX)});
         case LUA_TUSERDATA: {
             std::vector<unsigned char> copy;
-            unsigned char *data = (unsigned char *)lua_touserdata(l.get(), index);
-            size_t len = lua_rawlen (l.get(), index);
+            unsigned char *data = (unsigned char *)lua_touserdata(l.GetState(), index);
+            size_t len = lua_rawlen (l.GetState(), index);
             if(data && len){
                 copy.resize(len);
                 memcpy(&copy.front(),data,len);
@@ -53,15 +53,15 @@ inline Value _get(_id<Value>, const std::shared_ptr<lua_State> &l, const int ind
     }
 }
     
-inline Value _check_get(_id<Value>, const std::shared_ptr<lua_State> &l, const int index) {
+inline Value _check_get(_id<Value>, const detail::StateBlock &l, const int index) {
     return _get(_id<Value>{}, l, index);
 }
     
-inline void _push(const std::shared_ptr<lua_State> &l, const Value &value) {
+inline void _push(const detail::StateBlock &l, const Value &value) {
     value.push(l);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, const Value& value) {
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, const Value& value) {
     _push(l, value);
 }
     
@@ -103,7 +103,7 @@ public:
     virtual const std::map<Value, Value>& table_value() const { return statics().empty_table; }
     virtual const Value& operator[](const Value&) const { return statics().nil; }
     virtual Value execute(const std::vector<sel::Value> &params) const { return statics().nil; }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const = 0;
+    virtual void push_value(const detail::StateBlock &l) const = 0;
 };
 
 template <Value::Type tag, typename T>
@@ -125,7 +125,7 @@ class NilValue : public BaseValue<Value::Type::Nil, std::nullptr_t> {
 public:
     explicit NilValue() : BaseValue(nullptr) {}
     virtual LuaValue* clone() const override { return new NilValue(); }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
+    virtual void push_value(const detail::StateBlock &l) const override {
         detail::_push(l, nullptr);
     }
 };
@@ -135,7 +135,7 @@ public:
     explicit BoolValue(bool value) : BaseValue(value) {}
     virtual LuaValue* clone() const override { return new BoolValue(_value); }
     virtual inline bool bool_value() const override { return static_cast<bool>(_value); }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
+    virtual void push_value(const detail::StateBlock &l) const override {
         detail::_push(l, _value);
     }
 };
@@ -146,7 +146,7 @@ public:
     virtual LuaValue* clone() const override { return new LightUserDataValue(_value); }
     virtual inline bool bool_value() const override { return static_cast<bool>(_value); }
     virtual const void* userdata_value() const { return _value; }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
+    virtual void push_value(const detail::StateBlock &l) const override {
         detail::_push(l, _value);
     }
 };
@@ -157,7 +157,7 @@ public:
     virtual LuaValue* clone() const override { return new NumberValue(_value); }
     virtual inline double number_value() const override { return static_cast<double>(_value); }
     virtual inline const std::string& string_value() const override { return _temp = std::to_string(_value); }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
+    virtual void push_value(const detail::StateBlock &l) const override {
         detail::_push(l, _value);
     }
 
@@ -172,7 +172,7 @@ public:
     virtual LuaValue* clone() const override { return new StringValue(_value); }
     virtual inline double number_value() const override { return static_cast<double>(std::stod(_value)); }
     virtual inline const std::string& string_value() const override { return _value; }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
+    virtual void push_value(const detail::StateBlock &l) const override {
         detail::_push(l, _value);
     }
 };
@@ -202,14 +202,14 @@ public:
 
     virtual inline const std::map<Value, Value>& table_value() const override { return _value; }
     virtual inline Value& operator[](const Value &value) { return this->_value[value]; }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
-        lua_createtable(l.get(), 0, 0);
+    virtual void push_value(const detail::StateBlock &l) const override {
+        lua_createtable(l.GetState(), 0, 0);
         for (const auto &item : _value) {
             if(!item.first.Is(Value::Type::Nil) && !item.second.Is(Value::Type::Nil))
             {
                 detail::_push(l, item.first);
                 detail::_push(l, item.second);
-                lua_rawset(l.get(), -3);
+                lua_rawset(l.GetState(), -3);
             }
         }
     }
@@ -226,8 +226,8 @@ public:
         return sel::Value(detail::_lift(this->_value, params));
     }
     
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
-        Registry *registry = detail::RegistryStorage::get_registry(l.get());
+    virtual void push_value(const detail::StateBlock &l) const override {
+        Registry *registry = l.GetRegistry();
         if(registry)
             registry->Register(this->_value);
     }
@@ -239,18 +239,18 @@ public:
     explicit LuaFunctionValue(const LuaRef &value) : BaseValue(value) {}
     virtual LuaValue* clone() const override { return new LuaFunctionValue(_value); }
     virtual sel::Value execute(const std::vector<sel::Value> &params) const override {
-        const std::shared_ptr<lua_State> &state = _value.GetState();
+        const detail::StateBlock *state = _value.GetStateBlock().get();
         _value.Push();
         for(auto const it:params)
-            detail::_push(state, it);
-        lua_call(state.get(), (int)params.size(), 1);
-        Value ret = detail::_pop(detail::_id<Value>{}, state);
-        lua_settop(state.get(), 0);
+            detail::_push(*state, it);
+        lua_call(state->GetState(), (int)params.size(), 1);
+        Value ret = detail::_pop(detail::_id<Value>{}, *state);
+        lua_settop(state->GetState(), 0);
         return ret;
     }
 
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override {
-        if(_value.GetState() == l)
+    virtual void push_value(const detail::StateBlock &l) const override {
+        if(_value.GetStateBlock().get() == &l)
             _value.Push();
         else
             detail::_push(l, nullptr);
@@ -263,9 +263,9 @@ public:
     explicit UserDataValue(const std::vector<unsigned char> &value) : BaseValue(value) {}
     virtual LuaValue* clone() const override { return new UserDataValue(_value); }
     virtual const void* userdata_value() const { return &_value.front(); }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override
+    virtual void push_value(const detail::StateBlock &l) const override
     {
-        void *data = lua_newuserdata(l.get(), _value.size());
+        void *data = lua_newuserdata(l.GetState(), _value.size());
         memcpy(data, &_value.front(), _value.size());
     }
 };
@@ -274,7 +274,7 @@ class ThreadValue : public BaseValue<Value::Type::Thread, std::nullptr_t> {
 public:
     explicit ThreadValue() : BaseValue(nullptr) {}
     virtual LuaValue* clone() const override { return new ThreadValue(); }
-    virtual void push_value(const std::shared_ptr<lua_State> &l) const override
+    virtual void push_value(const detail::StateBlock &l) const override
     {
         detail::_push(l, nullptr);
     }
@@ -426,7 +426,7 @@ inline bool Value::operator <(const Value &other) const {
     return type < other.type();
 }
 
-inline void Value::push(const std::shared_ptr<lua_State> &l) const {
+inline void Value::push(const detail::StateBlock &l) const {
     _value->push_value(l);
 }
 

@@ -132,7 +132,7 @@ public:
     template <typename... Args>
     Value operator()(Args... args) const;
     bool operator <(const Value &other) const;
-    void push(const std::shared_ptr<lua_State> &l) const;
+    void push(const detail::StateBlock &l) const;
 private:
     std::unique_ptr<LuaValue> _value;
 };
@@ -140,34 +140,6 @@ private:
 class Registry;
     
 namespace detail {
-    
-struct RegistryStorage
-{
-    Registry *registry;
-    void *data;
-    lua_Alloc function;
-    
-    static void *lua_allocator(void *ud, void *ptr, size_t osize, size_t nsize)
-    {
-        RegistryStorage *storage = reinterpret_cast<RegistryStorage*>(ud);
-        return storage->function(storage->data, ptr, osize, nsize);
-    }
-    
-    static void store_registry(lua_State *l, Registry *r)
-    {
-        void *data = nullptr;
-        lua_Alloc func = lua_getallocf(l, &data);
-        RegistryStorage *storage = new RegistryStorage{r, data, func};
-        lua_setallocf(l, &lua_allocator, storage);
-    }
-    
-    static Registry * get_registry(lua_State *l)
-    {
-        void *data = nullptr;
-        lua_getallocf(l, &data);
-        return reinterpret_cast<RegistryStorage*>(data)->registry;
-    }
-};
 
 template <typename T>
 struct is_primitive {
@@ -208,135 +180,135 @@ struct is_primitive<std::string> {
 
 /* getters */
 template <typename T>
-inline T* _get(_id<T*>, const std::shared_ptr<lua_State> &l, const int index) {
-    auto t = lua_topointer(l.get(), index);
+inline T* _get(_id<T*>, const detail::StateBlock &l, const int index) {
+    auto t = lua_topointer(l.GetState(), index);
     return (T*)(t);
 }
 
-inline bool _get(_id<bool>, const std::shared_ptr<lua_State> &l, const int index) {
-    return lua_toboolean(l.get(), index) != 0;
+inline bool _get(_id<bool>, const detail::StateBlock &l, const int index) {
+    return lua_toboolean(l.GetState(), index) != 0;
 }
 
-inline char _get(_id<char>, const std::shared_ptr<lua_State> &l, const int index) {
-    return *lua_tostring(l.get(), index);
+inline char _get(_id<char>, const detail::StateBlock &l, const int index) {
+    return *lua_tostring(l.GetState(), index);
 }
 
-inline int _get(_id<int>, const std::shared_ptr<lua_State> &l, const int index) {
-    return static_cast<int>(lua_tointeger(l.get(), index));
+inline int _get(_id<int>, const detail::StateBlock &l, const int index) {
+    return static_cast<int>(lua_tointeger(l.GetState(), index));
 }
 
-inline unsigned int _get(_id<unsigned int>, const std::shared_ptr<lua_State> &l, const int index) {
+inline unsigned int _get(_id<unsigned int>, const detail::StateBlock &l, const int index) {
 #if LUA_VERSION_NUM >= 502
-    return static_cast<unsigned>(lua_tounsigned(l.get(), index));
+    return static_cast<unsigned>(lua_tounsigned(l.GetState(), index));
 #else
-    return static_cast<unsigned>(lua_tointeger(l.get(), index));
+    return static_cast<unsigned>(lua_tointeger(l.GetState(), index));
 #endif
 }
 
-inline long _get(_id<long>, const std::shared_ptr<lua_State> &l, const int index) {
-  return static_cast<long>(lua_tointeger(l.get(), index));
+inline long _get(_id<long>, const detail::StateBlock &l, const int index) {
+  return static_cast<long>(lua_tointeger(l.GetState(), index));
 }
 
-inline unsigned long _get(_id<unsigned long>, const std::shared_ptr<lua_State> &l, const int index) {
+inline unsigned long _get(_id<unsigned long>, const detail::StateBlock &l, const int index) {
 #if LUA_VERSION_NUM >= 502
-    return static_cast<unsigned long>(lua_tounsigned(l.get(), index));
+    return static_cast<unsigned long>(lua_tounsigned(l.GetState(), index));
 #else
-    return static_cast<unsigned long>(lua_tointeger(l.get(), index));
+    return static_cast<unsigned long>(lua_tointeger(l.GetState(), index));
 #endif
 }
     
-inline long long _get(_id<long long>, const std::shared_ptr<lua_State> &l, const int index) {
-    return lua_tointeger(l.get(), index);
+inline long long _get(_id<long long>, const detail::StateBlock &l, const int index) {
+    return lua_tointeger(l.GetState(), index);
 }
 
-inline unsigned long long _get(_id<unsigned long long>, const std::shared_ptr<lua_State> &l, const int index) {
+inline unsigned long long _get(_id<unsigned long long>, const detail::StateBlock &l, const int index) {
 #if LUA_VERSION_NUM >= 502
-    return static_cast<unsigned long long>(lua_tounsigned(l.get(), index));
+    return static_cast<unsigned long long>(lua_tounsigned(l.GetState(), index));
 #else
-    return static_cast<unsigned long long>(lua_tointeger(l.get(), index));
+    return static_cast<unsigned long long>(lua_tointeger(l.GetState(), index));
 #endif
 }
 
-inline float _get(_id<float>, const std::shared_ptr<lua_State> &l, const int index) {
-    return lua_tonumber(l.get(), index);
+inline float _get(_id<float>, const detail::StateBlock &l, const int index) {
+    return lua_tonumber(l.GetState(), index);
 }
     
-inline double _get(_id<double>, const std::shared_ptr<lua_State> &l, const int index) {
-    return lua_tonumber(l.get(), index);
+inline double _get(_id<double>, const detail::StateBlock &l, const int index) {
+    return lua_tonumber(l.GetState(), index);
 }
 
-inline std::string _get(_id<std::string>, const std::shared_ptr<lua_State> &l, const int index) {
+inline std::string _get(_id<std::string>, const detail::StateBlock &l, const int index) {
     size_t size;
-    const char *buff = lua_tolstring(l.get(), index, &size);
+    const char *buff = lua_tolstring(l.GetState(), index, &size);
     return std::string{buff, size};
 }
     
-inline Value _get(_id<Value>, const std::shared_ptr<lua_State> &l, const int index);
+inline Value _get(_id<Value>, const detail::StateBlock &l, const int index);
 
 template <typename T>
-inline T* _check_get(_id<T*>, const std::shared_ptr<lua_State> &l, const int index) {
-    return (T *)lua_topointer(l.get(), index);
+inline T* _check_get(_id<T*>, const detail::StateBlock &l, const int index) {
+    return (T *)lua_topointer(l.GetState(), index);
 };
 
 template <typename T>
-inline T& _check_get(_id<T&>, const std::shared_ptr<lua_State> &l, const int index) {
+inline T& _check_get(_id<T&>, const detail::StateBlock &l, const int index) {
     static_assert(!is_primitive<T>::value,
                   "Reference types must not be primitives.");
-    return *(T *)lua_topointer(l.get(), index);
+    return *(T *)lua_topointer(l.GetState(), index);
 };
 
 template <typename T>
-inline T _check_get(_id<T&&>, const std::shared_ptr<lua_State> &l, const int index) {
-    return _check_get(_id<T>{}, l.get(), index);
+inline T _check_get(_id<T&&>, const detail::StateBlock &l, const int index) {
+    return _check_get(_id<T>{}, l.GetState(), index);
 };
 
-inline int _check_get(_id<int>, const std::shared_ptr<lua_State> &l, const int index) {
-    return luaL_checkint(l.get(), index);
+inline int _check_get(_id<int>, const detail::StateBlock &l, const int index) {
+    return luaL_checkint(l.GetState(), index);
 };
 
-inline unsigned int _check_get(_id<unsigned int>, const std::shared_ptr<lua_State> &l, const int index) {
+inline unsigned int _check_get(_id<unsigned int>, const detail::StateBlock &l, const int index) {
 #if LUA_VERSION_NUM >= 502
-    return static_cast<unsigned>(luaL_checkunsigned(l.get(), index));
+    return static_cast<unsigned>(luaL_checkunsigned(l.GetState(), index));
 #else
-    return static_cast<unsigned>(luaL_checkint(l.get(), index));
+    return static_cast<unsigned>(luaL_checkint(l.GetState(), index));
 #endif
 }
 
-inline long _check_get(_id<long>, const std::shared_ptr<lua_State> &l, const int index) {
-    return luaL_checklong(l.get(), index);
+inline long _check_get(_id<long>, const detail::StateBlock &l, const int index) {
+    return luaL_checklong(l.GetState(), index);
 }
 
-inline unsigned long _check_get(_id<unsigned long>, const std::shared_ptr<lua_State> &l, const int index) {
-    return static_cast<unsigned long>(luaL_checklong(l.get(), index));
+inline unsigned long _check_get(_id<unsigned long>, const detail::StateBlock &l, const int index) {
+    return static_cast<unsigned long>(luaL_checklong(l.GetState(), index));
 }
     
-inline long long _check_get(_id<long long>, const std::shared_ptr<lua_State> &l, const int index) {
-    return static_cast<long long>(luaL_checklong(l.get(), index));
+inline long long _check_get(_id<long long>, const detail::StateBlock &l, const int index) {
+    return static_cast<long long>(luaL_checklong(l.GetState(), index));
 }
 
-inline unsigned long long _check_get(_id<unsigned long long>, const std::shared_ptr<lua_State> &l, const int index) {
-    return static_cast<unsigned long long>(luaL_checklong(l.get(), index));
+inline unsigned long long _check_get(_id<unsigned long long>, const detail::StateBlock &l, const int index) {
+    return static_cast<unsigned long long>(luaL_checklong(l.GetState(), index));
 }
 
-inline lua_Number _check_get(_id<float>, const std::shared_ptr<lua_State> &l, const int index) {
-    return luaL_checknumber(l.get(), index);
+inline lua_Number _check_get(_id<float>, const detail::StateBlock &l, const int index) {
+    return luaL_checknumber(l.GetState(), index);
 }
     
-inline lua_Number _check_get(_id<double>, const std::shared_ptr<lua_State> &l, const int index) {
-    return luaL_checknumber(l.get(), index);
+inline lua_Number _check_get(_id<double>, const detail::StateBlock &l, const int index) {
+    return luaL_checknumber(l.GetState(), index);
 }
 
-inline bool _check_get(_id<bool>, const std::shared_ptr<lua_State> &l, const int index) {
-    return lua_toboolean(l.get(), index) != 0;
+inline bool _check_get(_id<bool>, const detail::StateBlock &l, const int index) {
+    return lua_toboolean(l.GetState(), index) != 0;
 }
 
-inline std::string _check_get(_id<std::string>, const std::shared_ptr<lua_State> &l, const int index) {
+inline std::string _check_get(_id<std::string>, const detail::StateBlock &l, const int index) {
     size_t size;
-    const char *buff = luaL_checklstring(l.get(), index, &size);
+    const char *buff = luaL_checklstring(l.GetState(), index, &size);
     return std::string{buff, size};
 }
     
-inline Value _check_get(_id<Value>, const std::shared_ptr<lua_State> &l, const int index);
+inline Value _check_get(_id<Value>, const detail::StateBlock &l, const int index);
 
 // Worker type-trait struct to _pop_n
 // Popping multiple elements returns a tuple
@@ -346,14 +318,14 @@ struct _pop_n_impl {
     using type =  std::tuple<Ts...>;
 
     template <std::size_t... N>
-    static type worker(const std::shared_ptr<lua_State> &l,
+    static type worker(const detail::StateBlock &l,
                        _indices<N...>) {
         return std::make_tuple(_get(_id<Ts>{}, l, N + 1)...);
     }
 
-    static type apply(const std::shared_ptr<lua_State> &l) {
+    static type apply(const detail::StateBlock &l) {
         auto ret = worker(l, typename _indices_builder<S>::type());
-        lua_pop(l.get(), S);
+        lua_pop(l.GetState(), S);
         return ret;
     }
 };
@@ -362,22 +334,22 @@ struct _pop_n_impl {
 template <typename... Ts>
 struct _pop_n_impl<0, Ts...> {
     using type = void;
-    static type apply(const std::shared_ptr<lua_State> &) {}
+    static type apply(const detail::StateBlock &) {}
 };
 
 // Popping one element returns an unboxed value
 template <typename T>
 struct _pop_n_impl<1, T> {
     using type = T;
-    static type apply(const std::shared_ptr<lua_State> &l) {
+    static type apply(const detail::StateBlock &l) {
         T ret = _get(_id<T>{}, l, -1);
-        lua_pop(l.get(), 1);
+        lua_pop(l.GetState(), 1);
         return ret;
     }
 };
 
 template <typename... T>
-typename _pop_n_impl<sizeof...(T), T...>::type _pop_n(const std::shared_ptr<lua_State> &l) {
+typename _pop_n_impl<sizeof...(T), T...>::type _pop_n(const detail::StateBlock &l) {
     return _pop_n_impl<sizeof...(T), T...>::apply(l);
 }
 
@@ -386,14 +358,14 @@ struct _pop_n_reset_impl {
     using type =  std::tuple<Ts...>;
 
     template <std::size_t... N>
-    static type worker(const std::shared_ptr<lua_State> &l,
+    static type worker(const detail::StateBlock &l,
                        _indices<N...>) {
         return std::make_tuple(_get(_id<Ts>{}, l, N + 1)...);
     }
 
-    static type apply(const std::shared_ptr<lua_State> &l) {
+    static type apply(const detail::StateBlock &l) {
         auto ret = worker(l, typename _indices_builder<S>::type());
-        lua_settop(l.get(), 0);
+        lua_settop(l.GetState(), 0);
         return ret;
     }
 };
@@ -402,8 +374,8 @@ struct _pop_n_reset_impl {
 template <typename... Ts>
 struct _pop_n_reset_impl<0, Ts...> {
     using type = void;
-    static type apply(const std::shared_ptr<lua_State> &l) {
-        lua_settop(l.get(), 0);
+    static type apply(const detail::StateBlock &l) {
+        lua_settop(l.GetState(), 0);
     }
 };
 
@@ -411,236 +383,236 @@ struct _pop_n_reset_impl<0, Ts...> {
 template <typename T>
 struct _pop_n_reset_impl<1, T> {
     using type = T;
-    static type apply(const std::shared_ptr<lua_State> &l) {
+    static type apply(const detail::StateBlock &l) {
         T ret = _get(_id<T>{}, l, -1);
-        lua_settop(l.get(), 0);
+        lua_settop(l.GetState(), 0);
         return ret;
     }
 };
 
 template <typename... T>
 typename _pop_n_reset_impl<sizeof...(T), T...>::type
-_pop_n_reset(const std::shared_ptr<lua_State> &l) {
+_pop_n_reset(const detail::StateBlock &l) {
     return _pop_n_reset_impl<sizeof...(T), T...>::apply(l);
 }
 
 template <typename T>
-T _pop(_id<T> t, const std::shared_ptr<lua_State> &l) {
+T _pop(_id<T> t, const detail::StateBlock &l) {
     T ret =  _get(t, l, -1);
-    lua_pop(l.get(), 1);
+    lua_pop(l.GetState(), 1);
     return ret;
 }
 
 /* Setters */
 
-inline void _push(const std::shared_ptr<lua_State> &l) {}
+inline void _push(const detail::StateBlock &l) {}
 
 template <typename T>
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &m, T* t) {
+inline void _push(const detail::StateBlock &l, MetatableRegistry &m, T* t) {
 	if(t == nullptr) {
-		lua_pushnil(l.get());
+		lua_pushnil(l.GetState());
 	}
 	else {
 		lua_pushlightuserdata(l, t);
 		if (const std::string* metatable = m.Find(typeid(T))) {
-			luaL_setmetatable(l.get(), metatable->c_str());
+			luaL_setmetatable(l.GetState(), metatable->c_str());
 		}
 	}
 }
 
 template <typename T>
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &m, T& t) {
-    lua_pushlightuserdata(l.get(), &t);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &m, T& t) {
+    lua_pushlightuserdata(l.GetState(), &t);
     if (const std::string* metatable = m.Find(typeid(T))) {
-        luaL_setmetatable(l.get(), metatable->c_str());
+        luaL_setmetatable(l.GetState(), metatable->c_str());
     }
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, bool b) {
-    lua_pushboolean(l.get(), b);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, bool b) {
+    lua_pushboolean(l.GetState(), b);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, char c) {
-    lua_pushlstring(l.get(), &c, 1);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, char c) {
+    lua_pushlstring(l.GetState(), &c, 1);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, int i) {
-    lua_pushinteger(l.get(), i);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, int i) {
+    lua_pushinteger(l.GetState(), i);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, unsigned int u) {
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, unsigned int u) {
 #if LUA_VERSION_NUM >= 502
-    lua_pushunsigned(l.get(), u);
+    lua_pushunsigned(l.GetState(), u);
 #else
-    lua_pushinteger(l.get(), static_cast<lua_Integer>(u));
+    lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
 #endif
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, long i) {
-    lua_pushinteger(l.get(), i);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, long i) {
+    lua_pushinteger(l.GetState(), i);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, unsigned long u) {
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, unsigned long u) {
 #if LUA_VERSION_NUM >= 502
-    lua_pushunsigned(l.get(), static_cast<lua_Unsigned>(u));
+    lua_pushunsigned(l.GetState(), static_cast<lua_Unsigned>(u));
 #else
-    lua_pushinteger(l.get(), static_cast<lua_Integer>(u));
+    lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
 #endif
 }
     
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, long long i) {
-    lua_pushinteger(l.get(), i);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, long long i) {
+    lua_pushinteger(l.GetState(), i);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, unsigned long long u) {
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, unsigned long long u) {
 #if LUA_VERSION_NUM >= 502
-    lua_pushunsigned(l.get(), static_cast<lua_Unsigned>(u));
+    lua_pushunsigned(l.GetState(), static_cast<lua_Unsigned>(u));
 #else
-    lua_pushinteger(l.get(), static_cast<lua_Integer>(u));
+    lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
 #endif
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, float f) {
-    lua_pushnumber(l.get(), f);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, float f) {
+    lua_pushnumber(l.GetState(), f);
 }
     
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, double f) {
-    lua_pushnumber(l.get(), f);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, double f) {
+    lua_pushnumber(l.GetState(), f);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, const std::string &s) {
-    lua_pushlstring(l.get(), s.c_str(), s.size());
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, const std::string &s) {
+    lua_pushlstring(l.GetState(), s.c_str(), s.size());
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, const char *s) {
-    lua_pushstring(l.get(), s);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, const char *s) {
+    lua_pushstring(l.GetState(), s);
 }
     
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, const Value& value);
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, const Value& value);
 
 template <typename T>
-inline void _push(const std::shared_ptr<lua_State> &l, T* t) {
+inline void _push(const detail::StateBlock &l, T* t) {
 	if(t == nullptr) {
-		lua_pushnil(l.get());
+		lua_pushnil(l.GetState());
 	}
 	else {
-		lua_pushlightuserdata(l.get(), t);
+		lua_pushlightuserdata(l.GetState(), t);
 	}
 }
 
 template <typename T>
-inline void _push(const std::shared_ptr<lua_State> &l, T& t) {
-    lua_pushlightuserdata(l.get(), &t);
+inline void _push(const detail::StateBlock &l, T& t) {
+    lua_pushlightuserdata(l.GetState(), &t);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, bool b) {
-    lua_pushboolean(l.get(), b);
+inline void _push(const detail::StateBlock &l, bool b) {
+    lua_pushboolean(l.GetState(), b);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, int i) {
-    lua_pushinteger(l.get(), i);
+inline void _push(const detail::StateBlock &l, int i) {
+    lua_pushinteger(l.GetState(), i);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, unsigned int u) {
+inline void _push(const detail::StateBlock &l, unsigned int u) {
 #if LUA_VERSION_NUM >= 502
-    lua_pushunsigned(l.get(), u);
+    lua_pushunsigned(l.GetState(), u);
 #else
-    lua_pushinteger(l.get(), static_cast<lua_Integer>(u));
+    lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
 #endif
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, long i) {
-    lua_pushinteger(l.get(), i);
+inline void _push(const detail::StateBlock &l, long i) {
+    lua_pushinteger(l.GetState(), i);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, unsigned long u) {
+inline void _push(const detail::StateBlock &l, unsigned long u) {
 #if LUA_VERSION_NUM >= 502
-    lua_pushunsigned(l.get(), static_cast<lua_Unsigned>(u));
+    lua_pushunsigned(l.GetState(), static_cast<lua_Unsigned>(u));
 #else
-    lua_pushinteger(l.get(), static_cast<lua_Integer>(u));
+    lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
 #endif
 }
     
-inline void _push(const std::shared_ptr<lua_State> &l, long long i) {
-    lua_pushinteger(l.get(), i);
+inline void _push(const detail::StateBlock &l, long long i) {
+    lua_pushinteger(l.GetState(), i);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, unsigned long long u) {
+inline void _push(const detail::StateBlock &l, unsigned long long u) {
 #if LUA_VERSION_NUM >= 502
-    lua_pushunsigned(l.get(), static_cast<lua_Unsigned>(u));
+    lua_pushunsigned(l.GetState(), static_cast<lua_Unsigned>(u));
 #else
-    lua_pushinteger(l.get(), static_cast<lua_Integer>(u));
+    lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
 #endif
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, float f) {
-    lua_pushnumber(l.get(), f);
+inline void _push(const detail::StateBlock &l, float f) {
+    lua_pushnumber(l.GetState(), f);
 }
     
-inline void _push(const std::shared_ptr<lua_State> &l, double f) {
-    lua_pushnumber(l.get(), f);
+inline void _push(const detail::StateBlock &l, double f) {
+    lua_pushnumber(l.GetState(), f);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, const std::string &s) {
-    lua_pushlstring(l.get(), s.c_str(), s.size());
+inline void _push(const detail::StateBlock &l, const std::string &s) {
+    lua_pushlstring(l.GetState(), s.c_str(), s.size());
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, const char *s) {
-    lua_pushstring(l.get(), s);
+inline void _push(const detail::StateBlock &l, const char *s) {
+    lua_pushstring(l.GetState(), s);
 }
     
-inline void _push(const std::shared_ptr<lua_State> &l, const Value& value);
+inline void _push(const detail::StateBlock &l, const Value& value);
 
 template <typename T>
-inline void _set(const std::shared_ptr<lua_State> &l, T &&value, const int index) {
+inline void _set(const detail::StateBlock &l, T &&value, const int index) {
     _push(l, std::forward<T>(value));
-    lua_replace(l.get(), index);
+    lua_replace(l.GetState(), index);
 }
 
-inline void _push_n(const std::shared_ptr<lua_State>&, MetatableRegistry &) {}
+inline void _push_n(const detail::StateBlock &, MetatableRegistry &) {}
 
 template <typename T, typename... Rest>
-inline void _push_n(const std::shared_ptr<lua_State> &l, MetatableRegistry &m, T value, Rest... rest) {
+inline void _push_n(const detail::StateBlock &l, MetatableRegistry &m, T value, Rest... rest) {
     _push(l, m, std::forward<T>(value));
     _push_n(l, m, rest...);
 }
 
 template <typename... T, std::size_t... N>
-inline void _push_dispatcher(const std::shared_ptr<lua_State> &l,
+inline void _push_dispatcher(const detail::StateBlock &l,
                              MetatableRegistry &m,
                              const std::tuple<T...> &values,
                              _indices<N...>) {
     _push_n(l, m, std::get<N>(values)...);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &, std::tuple<>) {}
+inline void _push(const detail::StateBlock &l, MetatableRegistry &, std::tuple<>) {}
 
 template <typename... T>
-inline void _push(const std::shared_ptr<lua_State> &l, MetatableRegistry &m, const std::tuple<T...> &values) {
+inline void _push(const detail::StateBlock &l, MetatableRegistry &m, const std::tuple<T...> &values) {
     constexpr int num_values = sizeof...(T);
     _push_dispatcher(l, m, values,
                      typename _indices_builder<num_values>::type());
 }
 
-inline void _push_n(const std::shared_ptr<lua_State> &) {}
+inline void _push_n(const detail::StateBlock &) {}
 
 template <typename T, typename... Rest>
-inline void _push_n(const std::shared_ptr<lua_State> &l, T value, Rest... rest) {
+inline void _push_n(const detail::StateBlock &l, T value, Rest... rest) {
     _push(l, std::forward<T>(value));
     _push_n(l, rest...);
 }
 
 template <typename... T, std::size_t... N>
-inline void _push_dispatcher(const std::shared_ptr<lua_State> &l,
+inline void _push_dispatcher(const detail::StateBlock &l,
                              const std::tuple<T...> &values,
                              _indices<N...>) {
     _push_n(l, std::get<N>(values)...);
 }
 
-inline void _push(const std::shared_ptr<lua_State> &l, std::tuple<>) {}
+inline void _push(const detail::StateBlock &l, std::tuple<>) {}
 
 template <typename... T>
-inline void _push(const std::shared_ptr<lua_State> &l, const std::tuple<T...> &values) {
+inline void _push(const detail::StateBlock &l, const std::tuple<T...> &values) {
     constexpr int num_values = sizeof...(T);
     _push_dispatcher(l, values,
                      typename _indices_builder<num_values>::type());

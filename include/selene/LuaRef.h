@@ -9,14 +9,35 @@ extern "C" {
 }
 
 namespace sel {
+
+class Registry;
+
 namespace detail {
+
+class StateBlock: public std::enable_shared_from_this<StateBlock>
+{
+public:
+    StateBlock(lua_State *state, bool owned);
+    ~StateBlock();
+    inline lua_State *GetState() const {
+        return _state;
+    }
+    inline Registry *GetRegistry() const {
+        return _registry;
+    }
+private:
+    bool _owned;
+    lua_State *_state;
+    Registry *_registry;
+};
+    
 class LuaRefDeleter {
 private:
-    std::shared_ptr<lua_State> _state;
+    const detail::StateBlock &_state;
 public:
-    LuaRefDeleter(const std::shared_ptr<lua_State> &state) : _state{state} {}
+    LuaRefDeleter(const detail::StateBlock &state) : _state{state} {}
     void operator()(int *ref) const {
-        luaL_unref(_state.get(), LUA_REGISTRYINDEX, *ref);
+        luaL_unref(_state.GetState(), LUA_REGISTRYINDEX, *ref);
         delete ref;
     }
 };
@@ -24,17 +45,17 @@ public:
 class LuaRef {
 private:
     std::shared_ptr<int> _ref;
-    std::shared_ptr<lua_State> _state;
+    std::shared_ptr<const detail::StateBlock> _state;
 public:
-    LuaRef(const std::shared_ptr<lua_State> &state, int ref)
-        : _ref(new int{ref}, detail::LuaRefDeleter{state}), _state(state) {}
+    LuaRef(const detail::StateBlock &state, int ref)
+        : _ref(new int{ref}, detail::LuaRefDeleter{state}), _state(state.shared_from_this()) {}
     
-    LuaRef(const std::shared_ptr<lua_State> &state, const std::shared_ptr<int> &ref)
-    : _ref(ref), _state(state) {}
+    LuaRef(const detail::StateBlock &state, const std::shared_ptr<int> &ref)
+    : _ref(ref), _state(state.shared_from_this()) {}
 
     void Push() const {
-        lua_rawgeti(_state.get(), LUA_REGISTRYINDEX, *_ref);
+        lua_rawgeti(_state->GetState(), LUA_REGISTRYINDEX, *_ref);
     }
-    const std::shared_ptr<lua_State>& GetState() const { return _state;}
+    inline const std::shared_ptr<const detail::StateBlock>& GetStateBlock() const { return _state;}
 };
 }

@@ -15,8 +15,7 @@ class State;
 class Selector {
     friend class State;
 private:
-    std::shared_ptr<lua_State> _state;
-    Registry &_registry;
+    std::shared_ptr<const detail::StateBlock> _state;
     std::string _name;
     using Fun = std::function<void()>;
     using PFun = std::function<void(Fun)>;
@@ -35,45 +34,45 @@ private:
     using Functor = std::function<void(int)>;
     mutable Functor _functor;
 
-    Selector(const std::shared_ptr<lua_State> &s, Registry &r, const std::string &name,
+    Selector(const std::shared_ptr<const detail::StateBlock> &s, const std::string &name,
              std::vector<Fun> traversal, Fun get, PFun put)
-        : _state(s), _registry(r), _name(name), _traversal{traversal},
+        : _state(s),  _name(name), _traversal{traversal},
           _get(get), _put(put) {}
     
-    Selector(const std::shared_ptr<lua_State> &s, Registry &r, const std::string &name)
-    : _state(s), _registry(r), _name(name) {
+    Selector(const std::shared_ptr<const detail::StateBlock> &s, const std::string &name)
+    : _state(s), _name(name) {
         _get = [this, name]() {
-            lua_getglobal(_state.get(), name.c_str());
+            lua_getglobal(_state->GetState(), name.c_str());
         };
         _put = [this, name](Fun fun) {
             fun();
-            lua_setglobal(_state.get(), name.c_str());
+            lua_setglobal(_state->GetState(), name.c_str());
         };
     }
 
     template<size_t SIZE>
-    Selector(const std::shared_ptr<lua_State> &s, Registry &r, const char (&name)[SIZE])
-        : _state(s), _registry(r), _name(name) {
+    Selector(const std::shared_ptr<const detail::StateBlock> &s, const char (&name)[SIZE])
+        : _state(s), _name(name) {
         _get = [this, name]() {
-            lua_getglobal(_state.get(), name);
+            lua_getglobal(_state->GetState(), name);
         };
         _put = [this, name](Fun fun) {
             fun();
-            lua_setglobal(_state.get(), name);
+            lua_setglobal(_state->GetState(), name);
         };
     }
 
     void _check_create_table() const {
         _traverse();
         _get();
-        if (lua_istable(_state.get(), -1) == 0 ) { // not table
-            lua_pop(_state.get(), 1); // flush the stack
+        if (lua_istable(_state->GetState(), -1) == 0 ) { // not table
+            lua_pop(_state->GetState(), 1); // flush the stack
             auto put = [this]() {
-                lua_newtable(_state.get());
+                lua_newtable(_state->GetState());
             };
             _put(put);
         } else {
-            lua_pop(_state.get(), 1);
+            lua_pop(_state->GetState(), 1);
         }
     }
 
@@ -87,17 +86,17 @@ private:
     void _put_val(const T &functor) {
         _traverse();
         auto push = [this, functor]() {
-            _registry.Register(functor);
+            _state->GetRegistry()->Register(functor);
         };
         _put(push);
-        lua_settop(_state.get(), 0);
+        lua_settop(_state->GetState(), 0);
     }
     
     template <typename Ret, typename... Args>
     void _put_val(Ret (*fun)(Args...)) {
         _traverse();
         auto push = [this, fun]() {
-            _registry.Register(fun);
+            _state->GetRegistry()->Register(fun);
         };
         _put(push);
     }
@@ -106,7 +105,7 @@ private:
     void _put_val(const std::function<Ret(Args...)> &fun) {
         _traverse();
         auto push = [this, fun]() {
-            _registry.Register(fun);
+            _state->GetRegistry()->Register(fun);
         };
         _put(push);
     }
@@ -115,28 +114,28 @@ private:
     void _put_val(T i) {
         _traverse();
         auto push = [this, i]() {
-            detail::_push(_state.get(), i);
+            detail::_push(_state->GetState(), i);
         };
         _put(push);
-        lua_settop(_state.get(), 0);
+        lua_settop(_state->GetState(), 0);
     }
     
     void _put_val(const std::string &str) {
         _traverse();
         auto push = [this, str]() {
-            detail::_push(_state, str);
+            detail::_push(*_state.get(), str);
         };
         _put(push);
-        lua_settop(_state.get(), 0);
+        lua_settop(_state->GetState(), 0);
     }
     
     void _put_val(const Value &value) {
         _traverse();
         auto push = [this, value]() {
-            detail::_push(_state, value);
+            detail::_push(*_state.get(), value);
         };
         _put(push);
-        lua_settop(_state.get(), 0);
+        lua_settop(_state->GetState(), 0);
     }
     
     template <typename T>
@@ -147,8 +146,8 @@ private:
             _functor(1);
             _functor = nullptr;
         }
-        auto ret = detail::_pop(detail::_id<T>{}, _state);
-        lua_settop(_state.get(), 0);
+        auto ret = detail::_pop(detail::_id<T>{}, *_state.get());
+        lua_settop(_state->GetState(), 0);
         return ret;
     }
     
@@ -170,7 +169,7 @@ public:
     Type getType() const {
         _traverse();
         _get();
-        Type ret = static_cast<Type>(lua_type(_state.get(), -1));
+        Type ret = static_cast<Type>(lua_type(_state->GetState(), -1));
         return ret;
     }
     
@@ -181,7 +180,6 @@ public:
 
     Selector(const Selector &other)
         : _state(other._state),
-          _registry(other._registry),
           _name{other._name},
           _traversal{other._traversal},
           _get{other._get},
@@ -196,7 +194,7 @@ public:
             _get();
             _functor(0);
         }
-        lua_settop(_state.get(), 0);
+        lua_settop(_state->GetState(), 0);
     }
 
     // Allow automatic casting when used in comparisons
@@ -209,24 +207,24 @@ public:
         Selector copy{*this};
         copy._functor = [this, tuple_args, num_args](int num_ret) {
             // install handler, and swap(handler, function) on lua stack
-            int handler_index = SetErrorHandler(_state.get());
+            int handler_index = SetErrorHandler(_state->GetState());
             int func_index = handler_index - 1;
 #if LUA_VERSION_NUM >= 502
-            lua_pushvalue(_state.get(), func_index);
-            lua_copy(_state.get(), handler_index, func_index);
-            lua_replace(_state.get(), handler_index);
+            lua_pushvalue(_state->GetState(), func_index);
+            lua_copy(_state->GetState(), handler_index, func_index);
+            lua_replace(_state->GetState(), handler_index);
 #else
-            lua_pushvalue(_state.get(), func_index);
-            lua_push_value(_state.get(), handler_index);
-            lua_replace(_state.get(), func_index);
-            lua_replace(_state.get(), handler_index);
+            lua_pushvalue(_state->GetState(), func_index);
+            lua_push_value(_state->GetState(), handler_index);
+            lua_replace(_state->GetState(), func_index);
+            lua_replace(_state->GetState(), handler_index);
 #endif
             // call lua function with error handler
             detail::_push(_state, tuple_args);
-            lua_pcall(_state.get(), num_args, num_ret, handler_index - 1);
+            lua_pcall(_state->GetState(), num_args, num_ret, handler_index - 1);
 
             // remove error handler
-            lua_remove(_state.get(), handler_index - 1);
+            lua_remove(_state->GetState(), handler_index - 1);
         };
         return copy;
     }
@@ -267,10 +265,10 @@ public:
         _traverse();
         auto fun_tuple = std::make_tuple(funs...);
         auto push = [this, &t, &fun_tuple]() {
-            _registry.Register(t, fun_tuple);
+            _state->GetRegistry()->Register(t, fun_tuple);
         };
         _put(push);
-        lua_settop(_state.get(), 0);
+        lua_settop(_state->GetState(), 0);
     }
 
     template <typename T, typename... Args, typename... Funs>
@@ -279,10 +277,10 @@ public:
         auto fun_tuple = std::make_tuple(funs...);
         auto push = [this, &fun_tuple]() {
             typename detail::_indices_builder<sizeof...(Funs)>::type d;
-            _registry.RegisterClass<T, Args...>(_name, fun_tuple, d);
+            _state->GetRegistry()->RegisterClass<T, Args...>(_name, fun_tuple, d);
         };
         _put(push);
-        lua_settop(_state.get(), 0);
+        lua_settop(_state->GetState(), 0);
     }
 
     template <typename... Ret>
@@ -290,7 +288,7 @@ public:
         _traverse();
         _get();
         _functor(sizeof...(Ret));
-        return detail::_pop_n_reset<Ret...>(_state.get());
+        return detail::_pop_n_reset<Ret...>(_state->GetState());
     }
 
     template <typename T>
@@ -349,7 +347,7 @@ public:
         }
         auto ret = detail::_pop(detail::_id<sel::function<R(Args...)>>{},
                                 _state);
-        lua_settop(_state.get(), 0);
+        lua_settop(_state->GetState(), 0);
         return ret;
     }
     
@@ -358,7 +356,7 @@ public:
         _get();
         
         std::vector<std::pair<const Selector,Selector>> ret;
-        if(lua_type(_state.get(), -1) != LUA_TTABLE)
+        if(lua_type(_state->GetState(), -1) != LUA_TTABLE)
             return ret;
         
         auto traversal = _traversal;
@@ -369,84 +367,84 @@ public:
         std::vector<PFun> put1;
         std::vector<PFun> put2;
         
-        lua_pushvalue(_state.get(), -1);
+        lua_pushvalue(_state->GetState(), -1);
         // stack now contains: -1 => table
-        lua_pushnil(_state.get());
+        lua_pushnil(_state->GetState());
         // stack now contains: -1 => nil; -2 => table
         int counter = 0;
-        while (lua_next(_state.get(), -2))
+        while (lua_next(_state->GetState(), -2))
         {
             // stack now contains: -1 => value; -2 => key; -3 => table
             names.push_back(_name + "." + std::to_string(counter));
             get1.push_back([this, counter]() {
-                lua_pushvalue(_state.get(), -1);
-                lua_pushnil(_state.get());
-                lua_pushnil(_state.get());
+                lua_pushvalue(_state->GetState(), -1);
+                lua_pushnil(_state->GetState());
+                lua_pushnil(_state->GetState());
                 for(int i=0;i<counter+1;++i)
                 {
-                    lua_pop(_state.get(), 1);
-                    lua_next(_state.get(), -2);
+                    lua_pop(_state->GetState(), 1);
+                    lua_next(_state->GetState(), -2);
                 }
-                lua_pushvalue(_state.get(), -2);
+                lua_pushvalue(_state->GetState(), -2);
             });
             put1.push_back([this, counter](Fun fun) {
             });
             
-            switch(lua_type(_state.get(), -2))
+            switch(lua_type(_state->GetState(), -2))
             {
                 case LUA_TNUMBER:
                     {
-                        lua_Number index = lua_tonumber(_state.get(), -2);
+                        lua_Number index = lua_tonumber(_state->GetState(), -2);
                         get2.push_back([this, index]() {
-                            lua_pushnumber(_state.get(), index);
-                            lua_gettable(_state.get(), -2);
+                            lua_pushnumber(_state->GetState(), index);
+                            lua_gettable(_state->GetState(), -2);
                         });
                         put2.push_back([this, index](Fun fun) {
-                            lua_pushnumber(_state.get(), index);
+                            lua_pushnumber(_state->GetState(), index);
                             fun();
-                            lua_settable(_state.get(), -3);
-                            lua_pop(_state.get(), 1);
+                            lua_settable(_state->GetState(), -3);
+                            lua_pop(_state->GetState(), 1);
                         });
                     }
                     break;
                 case LUA_TSTRING:
                     {
-                        std::string name = lua_tostring(_state.get(), -2);
+                        std::string name = lua_tostring(_state->GetState(), -2);
                         get2.push_back([this, name]() {
-                            lua_getfield(_state.get(), -1, name.c_str());
+                            lua_getfield(_state->GetState(), -1, name.c_str());
                         });
                         put2.push_back([this, name](Fun fun) {
                             fun();
-                            lua_setfield(_state.get(), -2, name.c_str());
-                            lua_pop(_state.get(), 1);
+                            lua_setfield(_state->GetState(), -2, name.c_str());
+                            lua_pop(_state->GetState(), 1);
                         });
                     }
                     break;
                 default:
                     get2.push_back([this, counter]() {
-                        lua_pushvalue(_state.get(), -1);
-                        lua_pushnil(_state.get());
-                        lua_pushnil(_state.get());
+                        lua_pushvalue(_state->GetState(), -1);
+                        lua_pushnil(_state->GetState());
+                        lua_pushnil(_state->GetState());
                         for(int i=0;i<counter+1;++i)
                         {
-                            lua_pop(_state.get(), 1);
-                            lua_next(_state.get(), -2);
+                            lua_pop(_state->GetState(), 1);
+                            lua_next(_state->GetState(), -2);
                         }
                     });
                     put2.push_back([this, counter](Fun fun) {
                         
-                        lua_pushvalue(_state.get(), -1);
-                        lua_pushnil(_state.get());
-                        lua_pushnil(_state.get());
+                        lua_pushvalue(_state->GetState(), -1);
+                        lua_pushnil(_state->GetState());
+                        lua_pushnil(_state->GetState());
                         for(int i=0;i<counter+1;++i)
                         {
-                            lua_pop(_state.get(), 1);
-                            lua_next(_state.get(), -2);
+                            lua_pop(_state->GetState(), 1);
+                            lua_next(_state->GetState(), -2);
                         }
-                        lua_pushvalue(_state.get(), -2);
+                        lua_pushvalue(_state->GetState(), -2);
                         fun();
-                        lua_settable(_state.get(), -6);
-                        lua_pop(_state.get(), 1);
+                        lua_settable(_state->GetState(), -6);
+                        lua_pop(_state->GetState(), 1);
                     });
                     break;
             }
@@ -454,17 +452,17 @@ public:
             ++counter;
             
             // pop value, leaving original key
-            lua_pop(_state.get(), 1);
+            lua_pop(_state->GetState(), 1);
             // stack now contains: -1 => key; -2 => table
         }
         // stack now contains: -1 => table (when lua_next returns 0 it pops the key
         // but does not push anything.)
         // Pop table
-        lua_pop(_state.get(), 1);
+        lua_pop(_state->GetState(), 1);
         
         for(size_t i=0;i<names.size();++i)
         {
-            ret.emplace_back(Selector{_state, _registry, names[i], traversal, get1[i], put1[i]}, Selector{_state, _registry, names[i], traversal, get2[i], put2[i]});
+            ret.emplace_back(Selector{_state, names[i], traversal, get1[i], put1[i]}, Selector{_state, names[i], traversal, get2[i], put2[i]});
         }
         return ret;
     }
@@ -477,12 +475,12 @@ public:
         _check_create_table();
         _traversal.push_back(_get);
         _get = [this, name]() {
-            lua_getfield(_state.get(), -1, name);
+            lua_getfield(_state->GetState(), -1, name);
         };
         _put = [this, name](Fun fun) {
             fun();
-            lua_setfield(_state.get(), -2, name);
-            lua_pop(_state.get(), 1);
+            lua_setfield(_state->GetState(), -2, name);
+            lua_pop(_state->GetState(), 1);
         };
         return std::move(*this);
     }
@@ -491,12 +489,12 @@ public:
         _check_create_table();
         _traversal.push_back(_get);
         _get = [this, name]() {
-            lua_getfield(_state.get(), -1, name.c_str());
+            lua_getfield(_state->GetState(), -1, name.c_str());
         };
         _put = [this, name](Fun fun) {
             fun();
-            lua_setfield(_state.get(), -2, name.c_str());
-            lua_pop(_state.get(), 1);
+            lua_setfield(_state->GetState(), -2, name.c_str());
+            lua_pop(_state->GetState(), 1);
         };
         return std::move(*this);
     }
@@ -505,14 +503,14 @@ public:
         _check_create_table();
         _traversal.push_back(_get);
         _get = [this, index]() {
-            lua_pushnumber(_state.get(), index);
-            lua_gettable(_state.get(), -2);
+            lua_pushnumber(_state->GetState(), index);
+            lua_gettable(_state->GetState(), -2);
         };
         _put = [this, index](Fun fun) {
-            lua_pushnumber(_state.get(), index);
+            lua_pushnumber(_state->GetState(), index);
             fun();
-            lua_settable(_state.get(), -3);
-            lua_pop(_state.get(), 1);
+            lua_settable(_state->GetState(), -3);
+            lua_pop(_state->GetState(), 1);
         };
         return std::move(*this);
     }
@@ -523,14 +521,14 @@ public:
         auto traversal = _traversal;
         traversal.push_back(_get);
         Fun get = [this, name]() {
-            lua_getfield(_state.get(), -1, name);
+            lua_getfield(_state->GetState(), -1, name);
         };
         PFun put = [this, name](Fun fun) {
             fun();
-            lua_setfield(_state.get(), -2, name);
-            lua_pop(_state.get(), 1);
+            lua_setfield(_state->GetState(), -2, name);
+            lua_pop(_state->GetState(), 1);
         };
-        return Selector{_state, _registry, n, traversal, get, put};
+        return Selector{_state, n, traversal, get, put};
     }
     Selector operator[](const std::string &name) const & {
         auto n = _name + "." + name;
@@ -538,14 +536,14 @@ public:
         auto traversal = _traversal;
         traversal.push_back(_get);
         Fun get = [this, name]() {
-            lua_getfield(_state.get(), -1, name.c_str());
+            lua_getfield(_state->GetState(), -1, name.c_str());
         };
         PFun put = [this, name](Fun fun) {
             fun();
-            lua_setfield(_state.get(), -2, name.c_str());
-            lua_pop(_state.get(), 1);
+            lua_setfield(_state->GetState(), -2, name.c_str());
+            lua_pop(_state->GetState(), 1);
         };
-        return Selector{_state, _registry, n, traversal, get, put};
+        return Selector{_state, n, traversal, get, put};
     }
     Selector operator[](const double index) const & {
         auto name = _name + "." + std::to_string(index);
@@ -553,16 +551,16 @@ public:
         auto traversal = _traversal;
         traversal.push_back(_get);
         Fun get = [this, index]() {
-            lua_pushnumber(_state.get(), index);
-            lua_gettable(_state.get(), -2);
+            lua_pushnumber(_state->GetState(), index);
+            lua_gettable(_state->GetState(), -2);
         };
         PFun put = [this, index](Fun fun) {
-            lua_pushnumber(_state.get(), index);
+            lua_pushnumber(_state->GetState(), index);
             fun();
-            lua_settable(_state.get(), -3);
-            lua_pop(_state.get(), 1);
+            lua_settable(_state->GetState(), -3);
+            lua_pop(_state->GetState(), 1);
         };
-        return Selector{_state, _registry, name, traversal, get, put};
+        return Selector{_state, name, traversal, get, put};
     }
 
     friend bool operator==(const Selector &, const char *);
@@ -577,8 +575,8 @@ private:
             _functor(1);
             _functor = nullptr;
         }
-        auto ret =  detail::_pop(detail::_id<std::string>{}, _state);
-        lua_settop(_state.get(), 0);
+        auto ret =  detail::_pop(detail::_id<std::string>{}, *_state.get());
+        lua_settop(_state->GetState(), 0);
         return ret;
     }
 };
