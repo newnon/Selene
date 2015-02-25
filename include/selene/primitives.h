@@ -109,7 +109,12 @@ public:
     const Value& operator[] (const T &value) const;
     
     bool bool_value() const;
-    double number_value() const;
+    lua_Number number_value() const;
+    short short_value() const;
+    int int_value() const;
+    long long_value() const;
+    float float_value() const;
+    double double_value() const;
     const std::string& string_value() const;
     const std::map<Value, Value>& table_value() const;
     template <typename Ret, typename... Args>
@@ -150,6 +155,14 @@ struct is_primitive<char> {
     static constexpr bool value = true;
 };
 template <>
+struct is_primitive<short> {
+    static constexpr bool value = true;
+};
+template <>
+struct is_primitive<unsigned short> {
+    static constexpr bool value = true;
+};
+template <>
 struct is_primitive<int> {
     static constexpr bool value = true;
 };
@@ -166,11 +179,27 @@ struct is_primitive<unsigned long> {
     static constexpr bool value = true;
 };
 template <>
+struct is_primitive<long long> {
+    static constexpr bool value = true;
+};
+template <>
+struct is_primitive<unsigned long long> {
+    static constexpr bool value = true;
+};
+template <>
 struct is_primitive<bool> {
     static constexpr bool value = true;
 };
 template <>
-struct is_primitive<lua_Number> {
+struct is_primitive<float> {
+    static constexpr bool result = true;
+};
+template <>
+struct is_primitive<double> {
+    static constexpr bool result = true;
+};
+template <>
+struct is_primitive<long double> {
     static constexpr bool result = true;
 };
 template <>

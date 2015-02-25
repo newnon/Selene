@@ -97,7 +97,7 @@ public:
     virtual ~LuaValue() {}
     virtual Value::Type type() const = 0;
     virtual bool bool_value() const { return '\0'; }
-    virtual double number_value() const { return 0; }
+    virtual lua_Number number_value() const { return static_cast<lua_Number>(0); }
     virtual const void* userdata_value() const { return nullptr; }
     virtual const std::string& string_value() const { return statics().empty_string; }
     virtual const std::map<Value, Value>& table_value() const { return statics().empty_table; }
@@ -151,11 +151,11 @@ public:
     }
 };
 
-class NumberValue : public BaseValue<Value::Type::Number, double> {
+class NumberValue : public BaseValue<Value::Type::Number, lua_Number> {
 public:
-    explicit NumberValue(double value) : BaseValue(value) {}
+    explicit NumberValue(lua_Number value) : BaseValue(value) {}
     virtual LuaValue* clone() const override { return new NumberValue(_value); }
-    virtual inline double number_value() const override { return static_cast<double>(_value); }
+    virtual inline lua_Number number_value() const override { return static_cast<lua_Number>(_value); }
     virtual inline const std::string& string_value() const override { return _temp = std::to_string(_value); }
     virtual void push_value(const detail::StateBlock &l) const override {
         detail::_push(l, _value);
@@ -170,7 +170,7 @@ public:
     explicit StringValue(const std::string &value) : BaseValue(value) {}
     explicit StringValue(std::string &&value) : BaseValue(std::move(value)) {}
     virtual LuaValue* clone() const override { return new StringValue(_value); }
-    virtual inline double number_value() const override { return static_cast<double>(std::stod(_value)); }
+    virtual inline lua_Number number_value() const override { return static_cast<lua_Number>(std::stod(_value)); }
     virtual inline const std::string& string_value() const override { return _value; }
     virtual void push_value(const detail::StateBlock &l) const override {
         detail::_push(l, _value);
@@ -348,7 +348,12 @@ inline Value& Value::operator=(const LuaRef& value) { return (*this = Value(valu
 inline Value& Value::operator=(const std::vector<unsigned char> &value) { return (*this = Value(value)); }
 
 inline bool Value::bool_value() const { return _value->bool_value(); }
-inline double Value::number_value() const { return _value->number_value(); }
+inline lua_Number Value::number_value() const { return _value->number_value(); }
+inline short Value::short_value() const { return _value->number_value(); }
+inline int Value::int_value() const { return _value->number_value(); }
+inline long Value::long_value() const { return _value->number_value(); }
+inline float Value::float_value() const { return _value->number_value(); }
+inline double Value::double_value() const { return _value->number_value(); }
 inline const std::string& Value::string_value() const { return _value->string_value(); }
 inline const std::map<Value, Value>& Value::table_value() const { return _value->table_value(); }
 template <typename Ret, typename... Args>
