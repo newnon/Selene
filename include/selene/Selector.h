@@ -114,7 +114,7 @@ private:
     void _put_val(T i) {
         _traverse();
         auto push = [this, i]() {
-            detail::_push(_state->GetState(), i);
+            detail::_push(*_state.get(), i);
         };
         _put(push);
         lua_settop(_state->GetState(), 0);
@@ -220,7 +220,7 @@ public:
             lua_replace(_state->GetState(), handler_index);
 #endif
             // call lua function with error handler
-            detail::_push(_state, tuple_args);
+            detail::_push(*_state.get(), tuple_args);
             lua_pcall(_state->GetState(), num_args, num_ret, handler_index - 1);
 
             // remove error handler
@@ -288,7 +288,7 @@ public:
         _traverse();
         _get();
         _functor(sizeof...(Ret));
-        return detail::_pop_n_reset<Ret...>(_state->GetState());
+        return detail::_pop_n_reset<Ret...>(*_state.get());
     }
 
     template <typename T>
