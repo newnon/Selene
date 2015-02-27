@@ -227,7 +227,9 @@ inline int _get(_id<int>, const detail::StateBlock &l, const int index) {
 }
 
 inline unsigned int _get(_id<unsigned int>, const detail::StateBlock &l, const int index) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    return static_cast<unsigned>(lua_tointeger(l.GetState(), index));
+#elif LUA_VERSION_NUM >= 502
     return static_cast<unsigned>(lua_tounsigned(l.GetState(), index));
 #else
     return static_cast<unsigned>(lua_tointeger(l.GetState(), index));
@@ -239,7 +241,9 @@ inline long _get(_id<long>, const detail::StateBlock &l, const int index) {
 }
 
 inline unsigned long _get(_id<unsigned long>, const detail::StateBlock &l, const int index) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    return static_cast<unsigned long>(lua_tointeger(l.GetState(), index));
+#elif LUA_VERSION_NUM >= 502
     return static_cast<unsigned long>(lua_tounsigned(l.GetState(), index));
 #else
     return static_cast<unsigned long>(lua_tointeger(l.GetState(), index));
@@ -251,7 +255,9 @@ inline long long _get(_id<long long>, const detail::StateBlock &l, const int ind
 }
 
 inline unsigned long long _get(_id<unsigned long long>, const detail::StateBlock &l, const int index) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    return static_cast<unsigned long long>(lua_tointeger(l.GetState(), index));
+#elif LUA_VERSION_NUM >= 502
     return static_cast<unsigned long long>(lua_tounsigned(l.GetState(), index));
 #else
     return static_cast<unsigned long long>(lua_tointeger(l.GetState(), index));
@@ -292,11 +298,13 @@ inline T _check_get(_id<T&&>, const detail::StateBlock &l, const int index) {
 };
 
 inline int _check_get(_id<int>, const detail::StateBlock &l, const int index) {
-    return luaL_checkint(l.GetState(), index);
+    return luaL_checkinteger(l.GetState(), index);
 };
 
 inline unsigned int _check_get(_id<unsigned int>, const detail::StateBlock &l, const int index) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    return static_cast<unsigned>(luaL_checkinteger(l.GetState(), index));
+#elif LUA_VERSION_NUM >= 502
     return static_cast<unsigned>(luaL_checkunsigned(l.GetState(), index));
 #else
     return static_cast<unsigned>(luaL_checkint(l.GetState(), index));
@@ -304,19 +312,35 @@ inline unsigned int _check_get(_id<unsigned int>, const detail::StateBlock &l, c
 }
 
 inline long _check_get(_id<long>, const detail::StateBlock &l, const int index) {
+#if LUA_VERSION_NUM >= 503
+    return static_cast<long>(luaL_checkinteger(l.GetState(), index));
+#else
     return luaL_checklong(l.GetState(), index);
+#endif
 }
 
 inline unsigned long _check_get(_id<unsigned long>, const detail::StateBlock &l, const int index) {
+#if LUA_VERSION_NUM >= 503
+    return static_cast<unsigned long>(luaL_checkinteger(l.GetState(), index));
+#else
     return static_cast<unsigned long>(luaL_checklong(l.GetState(), index));
+#endif
 }
     
 inline long long _check_get(_id<long long>, const detail::StateBlock &l, const int index) {
+#if LUA_VERSION_NUM >= 503
+    return static_cast<long long>(luaL_checkinteger(l.GetState(), index));
+#else
     return static_cast<long long>(luaL_checklong(l.GetState(), index));
+#endif
 }
 
 inline unsigned long long _check_get(_id<unsigned long long>, const detail::StateBlock &l, const int index) {
+#if LUA_VERSION_NUM >= 503
+    return static_cast<unsigned long long>(luaL_checkinteger(l.GetState(), index));
+#else
     return static_cast<unsigned long long>(luaL_checklong(l.GetState(), index));
+#endif
 }
 
 inline lua_Number _check_get(_id<float>, const detail::StateBlock &l, const int index) {
@@ -470,7 +494,9 @@ inline void _push(const detail::StateBlock &l, MetatableRegistry &, int i) {
 }
 
 inline void _push(const detail::StateBlock &l, MetatableRegistry &, unsigned int u) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    lua_pushinteger(l.GetState(), u);
+#elif LUA_VERSION_NUM >= 502
     lua_pushunsigned(l.GetState(), u);
 #else
     lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
@@ -482,7 +508,9 @@ inline void _push(const detail::StateBlock &l, MetatableRegistry &, long i) {
 }
 
 inline void _push(const detail::StateBlock &l, MetatableRegistry &, unsigned long u) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    lua_pushinteger(l.GetState(), u);
+#elif LUA_VERSION_NUM >= 502
     lua_pushunsigned(l.GetState(), static_cast<lua_Unsigned>(u));
 #else
     lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
@@ -494,7 +522,9 @@ inline void _push(const detail::StateBlock &l, MetatableRegistry &, long long i)
 }
 
 inline void _push(const detail::StateBlock &l, MetatableRegistry &, unsigned long long u) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    lua_pushinteger(l.GetState(), u);
+#elif LUA_VERSION_NUM >= 502
     lua_pushunsigned(l.GetState(), static_cast<lua_Unsigned>(u));
 #else
     lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
@@ -543,7 +573,9 @@ inline void _push(const detail::StateBlock &l, int i) {
 }
 
 inline void _push(const detail::StateBlock &l, unsigned int u) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    lua_pushinteger(l.GetState(), u);
+#elif LUA_VERSION_NUM >= 502
     lua_pushunsigned(l.GetState(), u);
 #else
     lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
@@ -555,7 +587,9 @@ inline void _push(const detail::StateBlock &l, long i) {
 }
 
 inline void _push(const detail::StateBlock &l, unsigned long u) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    lua_pushinteger(l.GetState(), u);
+#elif LUA_VERSION_NUM >= 502
     lua_pushunsigned(l.GetState(), static_cast<lua_Unsigned>(u));
 #else
     lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
@@ -567,7 +601,9 @@ inline void _push(const detail::StateBlock &l, long long i) {
 }
 
 inline void _push(const detail::StateBlock &l, unsigned long long u) {
-#if LUA_VERSION_NUM >= 502
+#if LUA_VERSION_NUM >= 503
+    lua_pushinteger(l.GetState(), u);
+#elif LUA_VERSION_NUM >= 502
     lua_pushunsigned(l.GetState(), static_cast<lua_Unsigned>(u));
 #else
     lua_pushinteger(l.GetState(), static_cast<lua_Integer>(u));
