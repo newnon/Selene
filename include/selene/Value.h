@@ -32,10 +32,10 @@ inline Value _get(_id<Value>, const detail::StateBlock &l, const int index) {
                     t[idx] = _get(_id<Value>{}, l, -1);
                     lua_pop(l.GetState(), 1);
                 }
-                return Value(t);
+                return Value(std::move(t));
             }
         case LUA_TFUNCTION:
-            lua_pushvalue(l.GetState(), -1);
+            lua_pushvalue(l.GetState(), index);
             return Value(LuaRef{l, luaL_ref(l.GetState(), LUA_REGISTRYINDEX)});
         case LUA_TUSERDATA: {
             std::vector<unsigned char> copy;
@@ -110,7 +110,7 @@ template <Value::Type tag, typename T>
 class BaseValue : public LuaValue {
 public:
     explicit BaseValue(const T &value) : _value(value) {}
-    explicit BaseValue(const T &&value) : _value(std::move(value)) {}
+    explicit BaseValue(T &&value) : _value(std::move(value)) {}
     virtual ~BaseValue() {}
     
     virtual Value::Type type() const override {
@@ -237,11 +237,12 @@ class LuaFunctionValue: public BaseValue<Value::Type::Function, LuaRef>
 {
 public:
     explicit LuaFunctionValue(const LuaRef &value) : BaseValue(value) {}
+    explicit LuaFunctionValue(LuaRef &&value) : BaseValue(std::move(value)) {}
     virtual LuaValue* clone() const override { return new LuaFunctionValue(_value); }
     virtual sel::Value execute(const std::vector<sel::Value> &params) const override {
         const detail::StateBlock *state = _value.GetStateBlock().get();
         _value.Push();
-        for(auto const it:params)
+        for(auto const &it:params)
             detail::_push(*state, it);
         lua_call(state->GetState(), (int)params.size(), 1);
         Value ret = detail::_pop(detail::_id<Value>{}, *state);
@@ -283,7 +284,7 @@ public:
 template<class _Tp, class ..._Args>
 std::unique_ptr<_Tp> sel_make_unique(_Args&& ...__args)
 {
-    return std::unique_ptr<_Tp>(new _Tp(__args...));
+    return std::unique_ptr<_Tp>(new _Tp(std::forward<_Args>(__args)...));
 }
 
 inline Value::Value(const Value &other) { _value.reset(other._value->clone()); }
@@ -311,6 +312,7 @@ inline Value::Value(std::map<Value, Value> &&value) : _value(sel_make_unique<Tab
 inline Value::Value(const std::vector<Value> &value) : _value(sel_make_unique<TableValue>(value)) {}
 inline Value::Value(std::vector<Value> &&value) : _value(sel_make_unique<TableValue>(std::move(value))) {}
 inline Value::Value(const LuaRef& ref) : _value(sel_make_unique<LuaFunctionValue>(ref)) {}
+inline Value::Value(LuaRef&& ref) : _value(sel_make_unique<LuaFunctionValue>(std::move(ref))) {}
 template <typename Ret, typename... Args>
 inline Value::Value(const std::function<Ret(Args...)> &value) : _value(sel_make_unique<CFunctionValue<Ret, Args...>>(value)) {}
 template <typename Ret, typename... Args>
@@ -359,7 +361,7 @@ inline const std::map<Value, Value>& Value::table_value() const { return _value-
 template <typename Ret, typename... Args>
 inline const std::function<Ret(Args...)> Value::function_value() const
 {
-    Value value = *this;
+    const Value &value = *this;
     return [value](Args... args) { return Ret(value._value->execute(std::vector<sel::Value>{sel::Value(args)...})); };
 }
 

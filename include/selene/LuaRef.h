@@ -35,13 +35,14 @@ class LuaRefDeleter {
 private:
     const detail::StateBlock &_state;
 public:
-    LuaRefDeleter(const detail::StateBlock &state) : _state{state} {}
+    LuaRefDeleter(const detail::StateBlock &state) : _state(state) {}
     void operator()(int *ref) const {
         luaL_unref(_state.GetState(), LUA_REGISTRYINDEX, *ref);
         delete ref;
     }
 };
 }
+
 class LuaRef {
 private:
     std::shared_ptr<int> _ref;

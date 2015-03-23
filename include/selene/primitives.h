@@ -68,6 +68,7 @@ public:
     template <typename Ret, typename... Args>
     explicit Value(Ret (*value)(Args...));
     explicit Value(const LuaRef& ref);
+    explicit Value(LuaRef&& ref);
     explicit Value(const std::vector<unsigned char> &value);
     
     inline bool Is(Type type) const { return this->type() == type; }
